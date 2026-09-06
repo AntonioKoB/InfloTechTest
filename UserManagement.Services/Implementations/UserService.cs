@@ -37,4 +37,15 @@ public class UserService : IUserService
 
         await _dataAccess.CreateAsync(user);
     }
+
+    public async Task UpdateAsync(User user)
+    {
+        var existingUser = await GetByEmailAsync(user.Email);
+        if (existingUser is not null && existingUser.Id != user.Id)
+        {
+            throw new EmailAlreadyExistsException(user.Email);
+        }
+
+        await _dataAccess.UpdateAsync(user);
+    }
 }

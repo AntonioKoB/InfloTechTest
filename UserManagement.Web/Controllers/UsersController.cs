@@ -40,12 +40,18 @@ public class UsersController : Controller
     }
 
     [HttpGet("add")]
-    public IActionResult Add() => View();
+    public IActionResult Add()
+    {
+        SetFormViewData(nameof(Add));
+        return View("UserForm", new UserFormViewModel());
+    }
 
     [HttpPost("add")]
     public async Task<IActionResult> Add(UserFormViewModel model)
     {
-        if (!ModelState.IsValid) return View(model);
+        SetFormViewData(nameof(Add));
+
+        if (!ModelState.IsValid) return View("UserForm", model);
 
         try
         {
@@ -54,9 +60,53 @@ public class UsersController : Controller
         catch (EmailAlreadyExistsException)
         {
             ModelState.AddModelError(nameof(UserFormViewModel.Email), "A user with this email already exists.");
-            return View(model);
+            return View("UserForm", model);
         }
 
         return RedirectToAction(nameof(List));
+    }
+
+    [HttpGet("edit/{id:long}")]
+    public async Task<IActionResult> Edit(long id)
+    {
+        var user = await _userService.GetByIdAsync(id);
+        if (user is null) return View("UserNotFound", id);
+
+        SetFormViewData(nameof(Edit), id);
+        return View("UserForm", user.ToFormViewModel());
+    }
+
+    [HttpPost("edit/{id:long}")]
+    public async Task<IActionResult> Edit(long id, UserFormViewModel model)
+    {
+        var existingUser = await _userService.GetByIdAsync(id);
+        if (existingUser is null) return View("UserNotFound", id);
+
+        SetFormViewData(nameof(Edit), id);
+
+        if (!ModelState.IsValid) return View("UserForm", model);
+
+        model.ApplyTo(existingUser);
+
+        try
+        {
+            await _userService.UpdateAsync(existingUser);
+        }
+        catch (EmailAlreadyExistsException)
+        {
+            ModelState.AddModelError(nameof(UserFormViewModel.Email), "A user with this email already exists.");
+            return View("UserForm", model);
+        }
+
+        return RedirectToAction(nameof(List));
+    }
+
+    private void SetFormViewData(string formAction, long? userId = null)
+    {
+        var isEdit = formAction == nameof(Edit);
+        ViewData["Title"] = isEdit ? "Edit User" : "Add User";
+        ViewData["SubmitButtonText"] = isEdit ? "Save Changes" : "Add User";
+        ViewData["FormAction"] = formAction;
+        ViewData["UserId"] = userId;
     }
 }

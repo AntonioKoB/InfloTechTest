@@ -34,4 +34,11 @@ public interface IUserService
     /// <param name="user"></param>
     /// <returns></returns>
     Task CreateAsync(User user);
+
+    /// <summary>
+    /// Update an existing user
+    /// </summary>
+    /// <param name="user"></param>
+    /// <returns></returns>
+    Task UpdateAsync(User user);
 }

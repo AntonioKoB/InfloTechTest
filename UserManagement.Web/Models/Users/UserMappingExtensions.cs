@@ -32,4 +32,22 @@ public static class UserMappingExtensions
         DateOfBirth = model.DateOfBirth!.Value,
         IsActive = model.IsActive
     };
+
+    public static UserFormViewModel ToFormViewModel(this User user) => new()
+    {
+        Forename = user.Forename,
+        Surname = user.Surname,
+        Email = user.Email,
+        DateOfBirth = user.DateOfBirth,
+        IsActive = user.IsActive
+    };
+
+    public static void ApplyTo(this UserFormViewModel model, User user)
+    {
+        user.Forename = model.Forename;
+        user.Surname = model.Surname;
+        user.Email = model.Email;
+        user.DateOfBirth = model.DateOfBirth!.Value;
+        user.IsActive = model.IsActive;
+    }
 }

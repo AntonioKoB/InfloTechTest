@@ -164,6 +164,59 @@ public class UserServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_WhenNoOtherUserHasEmail_MustPersistViaDataContext()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var service = CreateService();
+        _dataContext
+            .Setup(s => s.FirstOrDefaultAsync<User>(It.IsAny<Expression<Func<User, bool>>>()))
+            .ReturnsAsync((User?)null);
+        var user = new User { Id = 5, Forename = "Updated", Surname = "User", Email = "updated@example.com", DateOfBirth = new DateOnly(1990, 1, 1) };
+
+        // Act: Invokes the method under test with the arranged parameters.
+        await service.UpdateAsync(user);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        _dataContext.Verify(s => s.UpdateAsync(user), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenEmailBelongsToSameUser_MustPersistViaDataContext()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var service = CreateService();
+        var user = new User { Id = 5, Forename = "Updated", Surname = "User", Email = "unchanged@example.com", DateOfBirth = new DateOnly(1990, 1, 1) };
+        _dataContext
+            .Setup(s => s.FirstOrDefaultAsync<User>(It.IsAny<Expression<Func<User, bool>>>()))
+            .ReturnsAsync(user);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        await service.UpdateAsync(user);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        _dataContext.Verify(s => s.UpdateAsync(user), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenEmailBelongsToAnotherUser_MustThrowEmailAlreadyExistsException()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var service = CreateService();
+        var otherUser = new User { Id = 99, Forename = "Other", Surname = "User", Email = "taken@example.com", DateOfBirth = new DateOnly(1990, 1, 1) };
+        _dataContext
+            .Setup(s => s.FirstOrDefaultAsync<User>(It.IsAny<Expression<Func<User, bool>>>()))
+            .ReturnsAsync(otherUser);
+        var updatingUser = new User { Id = 5, Forename = "Updated", Surname = "User", Email = "taken@example.com", DateOfBirth = new DateOnly(1990, 1, 1) };
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var act = () => service.UpdateAsync(updatingUser);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        await act.Should().ThrowAsync<EmailAlreadyExistsException>();
+        _dataContext.Verify(s => s.UpdateAsync(It.IsAny<User>()), Times.Never);
+    }
+
+    [Fact]
     public async Task GetByEmailAsync_WhenEmailDiffersOnlyByCase_PredicateMustStillMatch()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.

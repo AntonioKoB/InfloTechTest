@@ -26,7 +26,7 @@ public class DataContext : DbContext, IDataContext
 
     protected override void OnModelCreating(ModelBuilder model)
     {
-        model.Entity<User>().HasAlternateKey(u => u.Email);
+        model.Entity<User>().HasIndex(u => u.Email).IsUnique();
 
         model.Entity<User>().HasData(new[]
         {
@@ -53,7 +53,7 @@ public class DataContext : DbContext, IDataContext
         => await base.Set<TEntity>().FindAsync(id);
 
     public async Task<TEntity?> FirstOrDefaultAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class
-        => await base.Set<TEntity>().FirstOrDefaultAsync(predicate);
+        => await base.Set<TEntity>().AsNoTracking().FirstOrDefaultAsync(predicate);
 
     public Task CreateAsync<TEntity>(TEntity entity) where TEntity : class
         => PersistAsync(() => base.Add(entity));
