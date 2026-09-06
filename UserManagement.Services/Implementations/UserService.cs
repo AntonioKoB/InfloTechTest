@@ -22,6 +22,5 @@ public class UserService : IUserService
 
     public Task<IEnumerable<User>> GetAllAsync() => _dataAccess.GetAllAsync<User>();
 
-    public async Task<User?> GetByIdAsync(long id)
-        => (await _dataAccess.GetAllAsync<User>()).FirstOrDefault(u => u.Id == id);
+    public Task<User?> GetByIdAsync(long id) => _dataAccess.GetByIdAsync<User>(id);
 }

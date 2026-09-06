@@ -33,6 +33,33 @@ public class DataContextTests
     }
 
     [Fact]
+    public async Task GetByIdAsync_WhenEntityExists_MustReturnEntity()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var context = CreateContext();
+        var expected = (await context.GetAllAsync<User>()).First();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await context.GetByIdAsync<User>(expected.Id);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeEquivalentTo(expected);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_WhenEntityDoesNotExist_MustReturnNull()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var context = CreateContext();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await context.GetByIdAsync<User>(9999L);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetAllAsync_WhenUpdated_MustReflectUpdatedEntity()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.

@@ -33,8 +33,8 @@ public class UsersController : Controller
     public async Task<IActionResult> View(long id)
     {
         var user = await _userService.GetByIdAsync(id);
-        if (user is null) return NotFound();
+        if (user is null) return View("UserNotFound", id);
 
-        return View(user.ToListItemViewModel());
+        return View(user.ToViewModel());
     }
 }

@@ -13,6 +13,14 @@ public interface IDataContext
     Task<IEnumerable<TEntity>> GetAllAsync<TEntity>() where TEntity : class;
 
     /// <summary>
+    /// Get a single item matching the given ID, or null if none exists
+    /// </summary>
+    /// <typeparam name="TEntity"></typeparam>
+    /// <param name="id"></param>
+    /// <returns></returns>
+    Task<TEntity?> GetByIdAsync<TEntity>(object id) where TEntity : class;
+
+    /// <summary>
     /// Create a new item
     /// </summary>
     /// <typeparam name="TEntity"></typeparam>

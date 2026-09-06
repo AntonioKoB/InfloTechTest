@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using UserManagement.Models;
 using UserManagement.Services.Domain.Implementations;
@@ -52,32 +51,52 @@ public class UserServiceTests
     }
 
     [Fact]
-    public async Task GetByIdAsync_WhenUserExists_MustReturnMatchingUser()
+    public async Task GetByIdAsync_WhenContextReturnsUser_MustReturnSameUser()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var service = CreateService();
-        var users = SetupUsers();
-        var expected = users.First();
+        var user = SetupUser();
 
         // Act: Invokes the method under test with the arranged parameters.
-        var result = await service.GetByIdAsync(expected.Id);
+        var result = await service.GetByIdAsync(user.Id);
 
         // Assert: Verifies that the action of the method under test behaves as expected.
-        result.Should().BeSameAs(expected);
+        result.Should().BeSameAs(user);
     }
 
     [Fact]
-    public async Task GetByIdAsync_WhenUserDoesNotExist_MustReturnNull()
+    public async Task GetByIdAsync_WhenContextReturnsNull_MustReturnNull()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var service = CreateService();
-        SetupUsers();
+        _dataContext
+            .Setup(s => s.GetByIdAsync<User>(It.IsAny<object>()))
+            .ReturnsAsync((User?)null);
 
         // Act: Invokes the method under test with the arranged parameters.
         var result = await service.GetByIdAsync(999);
 
         // Assert: Verifies that the action of the method under test behaves as expected.
         result.Should().BeNull();
+    }
+
+    private User SetupUser(long id = 1, string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null)
+    {
+        var user = new User
+        {
+            Id = id,
+            Forename = forename,
+            Surname = surname,
+            Email = email,
+            IsActive = isActive,
+            DateOfBirth = dateOfBirth ?? new DateOnly(1990, 1, 1)
+        };
+
+        _dataContext
+            .Setup(s => s.GetByIdAsync<User>(id))
+            .ReturnsAsync(user);
+
+        return user;
     }
 
     private IEnumerable<User> SetupUsers(string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null)

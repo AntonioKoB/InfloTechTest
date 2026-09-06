@@ -70,12 +70,12 @@ public class UserControllerTests
 
         // Assert: Verifies that the action of the method under test behaves as expected.
         result.Should().BeOfType<ViewResult>()
-            .Which.Model.Should().BeOfType<UserListItemViewModel>()
+            .Which.Model.Should().BeOfType<UserViewModel>()
             .Which.Should().BeEquivalentTo(user);
     }
 
     [Fact]
-    public async Task View_WhenUserDoesNotExist_MustReturnNotFound()
+    public async Task View_WhenUserDoesNotExist_MustReturnUserNotFoundView()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var controller = CreateController();
@@ -87,7 +87,8 @@ public class UserControllerTests
         var result = await controller.View(999);
 
         // Assert: Verifies that the action of the method under test behaves as expected.
-        result.Should().BeOfType<NotFoundResult>();
+        result.Should().BeOfType<ViewResult>()
+            .Which.ViewName.Should().Be("UserNotFound");
     }
 
     private User SetupUser(string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null)
