@@ -21,7 +21,7 @@ public class DataContextTests
             Email = "brandnewuser@example.com",
             DateOfBirth = new DateOnly(1995, 4, 12)
         };
-        context.Create(entity);
+        await context.CreateAsync(entity);
 
         // Act: Invokes the method under test with the arranged parameters.
         var result = await context.GetAllAsync<User>();
@@ -33,12 +33,30 @@ public class DataContextTests
     }
 
     [Fact]
+    public async Task GetAllAsync_WhenUpdated_MustReflectUpdatedEntity()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var context = CreateContext();
+        var entity = (await context.GetAllAsync<User>()).First();
+        entity.Forename = "Updated Forename";
+        await context.UpdateAsync(entity);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await context.GetAllAsync<User>();
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result
+            .Should().Contain(s => s.Email == entity.Email)
+            .Which.Forename.Should().Be("Updated Forename");
+    }
+
+    [Fact]
     public async Task GetAllAsync_WhenDeleted_MustNotIncludeDeletedEntity()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var context = CreateContext();
         var entity = (await context.GetAllAsync<User>()).First();
-        context.Delete(entity);
+        await context.DeleteAsync(entity);
 
         // Act: Invokes the method under test with the arranged parameters.
         var result = await context.GetAllAsync<User>();
