@@ -22,6 +22,13 @@ public interface IUserService
     Task<User?> GetByIdAsync(long id);
 
     /// <summary>
+    /// Return a single user matching the given email, or null if none exists
+    /// </summary>
+    /// <param name="email"></param>
+    /// <returns></returns>
+    Task<User?> GetByEmailAsync(string email);
+
+    /// <summary>
     /// Create a new user
     /// </summary>
     /// <param name="user"></param>
