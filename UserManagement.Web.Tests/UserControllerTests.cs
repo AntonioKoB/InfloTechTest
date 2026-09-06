@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using UserManagement.Models;
 using UserManagement.Services.Domain.Interfaces;
@@ -56,7 +57,7 @@ public class UserControllerTests
             .Which.Items.Should().BeEquivalentTo(users);
     }
 
-    private User[] SetupUsers(string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true)
+    private User[] SetupUsers(string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null)
     {
         var users = new[]
         {
@@ -65,7 +66,8 @@ public class UserControllerTests
                 Forename = forename,
                 Surname = surname,
                 Email = email,
-                IsActive = isActive
+                IsActive = isActive,
+                DateOfBirth = dateOfBirth ?? new DateOnly(1990, 1, 1)
             }
         };
 
@@ -76,7 +78,7 @@ public class UserControllerTests
         return users;
     }
 
-    private User[] SetupActiveUsers(string forename = "Johnny", string surname = "User", string email = "juser@example.com")
+    private User[] SetupActiveUsers(string forename = "Johnny", string surname = "User", string email = "juser@example.com", DateOnly? dateOfBirth = null)
     {
         var users = new[]
         {
@@ -85,7 +87,8 @@ public class UserControllerTests
                 Forename = forename,
                 Surname = surname,
                 Email = email,
-                IsActive = true
+                IsActive = true,
+                DateOfBirth = dateOfBirth ?? new DateOnly(1990, 1, 1)
             }
         };
 
@@ -96,7 +99,7 @@ public class UserControllerTests
         return users;
     }
 
-    private User[] SetupNonActiveUsers(string forename = "Johnny", string surname = "User", string email = "juser@example.com")
+    private User[] SetupNonActiveUsers(string forename = "Johnny", string surname = "User", string email = "juser@example.com", DateOnly? dateOfBirth = null)
     {
         var users = new[]
         {
@@ -105,7 +108,8 @@ public class UserControllerTests
                 Forename = forename,
                 Surname = surname,
                 Email = email,
-                IsActive = false
+                IsActive = false,
+                DateOfBirth = dateOfBirth ?? new DateOnly(1990, 1, 1)
             }
         };
 

@@ -21,18 +21,9 @@ public class UsersController : Controller
             _ => await _userService.GetAllAsync()
         };
 
-        var items = users.Select(p => new UserListItemViewModel
-        {
-            Id = p.Id,
-            Forename = p.Forename,
-            Surname = p.Surname,
-            Email = p.Email,
-            IsActive = p.IsActive
-        });
-
         var model = new UserListViewModel
         {
-            Items = items.ToList()
+            Items = [.. users.Select(p => p.ToListItemViewModel())]
         };
 
         return View(model);
