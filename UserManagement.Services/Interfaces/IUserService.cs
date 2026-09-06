@@ -13,4 +13,11 @@ public interface IUserService
     /// <returns></returns>
     Task<IEnumerable<User>> FilterByActiveAsync(bool isActive);
     Task<IEnumerable<User>> GetAllAsync();
+
+    /// <summary>
+    /// Return a single user matching the given ID, or null if none exists
+    /// </summary>
+    /// <param name="id"></param>
+    /// <returns></returns>
+    Task<User?> GetByIdAsync(long id);
 }

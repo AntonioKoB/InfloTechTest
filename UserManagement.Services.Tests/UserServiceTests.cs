@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using UserManagement.Models;
 using UserManagement.Services.Domain.Implementations;
@@ -48,6 +49,35 @@ public class UserServiceTests
 
         // Assert: Verifies that the action of the method under test behaves as expected.
         result.Should().BeEquivalentTo(nonActiveUsers);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_WhenUserExists_MustReturnMatchingUser()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var service = CreateService();
+        var users = SetupUsers();
+        var expected = users.First();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await service.GetByIdAsync(expected.Id);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeSameAs(expected);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_WhenUserDoesNotExist_MustReturnNull()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var service = CreateService();
+        SetupUsers();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await service.GetByIdAsync(999);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeNull();
     }
 
     private IEnumerable<User> SetupUsers(string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null)

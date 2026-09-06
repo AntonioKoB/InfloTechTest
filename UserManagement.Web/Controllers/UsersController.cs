@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Threading.Tasks;
 using UserManagement.Services.Domain.Interfaces;
 using UserManagement.Web.Models.Users;
@@ -28,4 +29,7 @@ public class UsersController : Controller
 
         return View(model);
     }
+
+    [HttpGet("{id}")]
+    public Task<IActionResult> View(long id) => throw new NotImplementedException();
 }
