@@ -34,21 +34,18 @@ public class DataContext : DbContext, IDataContext
     public async Task<IEnumerable<TEntity>> GetAllAsync<TEntity>() where TEntity : class
         => await base.Set<TEntity>().ToListAsync();
 
-    public void Create<TEntity>(TEntity entity) where TEntity : class
-    {
-        base.Add(entity);
-        SaveChanges();
-    }
+    public Task CreateAsync<TEntity>(TEntity entity) where TEntity : class
+        => PersistAsync(() => base.Add(entity));
 
-    public new void Update<TEntity>(TEntity entity) where TEntity : class
-    {
-        base.Update(entity);
-        SaveChanges();
-    }
+    public Task UpdateAsync<TEntity>(TEntity entity) where TEntity : class
+        => PersistAsync(() => base.Update(entity));
 
-    public void Delete<TEntity>(TEntity entity) where TEntity : class
+    public Task DeleteAsync<TEntity>(TEntity entity) where TEntity : class
+        => PersistAsync(() => base.Remove(entity));
+
+    private async Task PersistAsync(Action trackerOperation)
     {
-        base.Remove(entity);
-        SaveChanges();
+        trackerOperation();
+        await SaveChangesAsync();
     }
 }
