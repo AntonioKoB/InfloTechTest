@@ -21,12 +21,18 @@ public interface IDataContext
     Task CreateAsync<TEntity>(TEntity entity) where TEntity : class;
 
     /// <summary>
-    /// Uodate an existing item matching the ID
+    /// Update an existing item matching the ID
     /// </summary>
     /// <typeparam name="TEntity"></typeparam>
     /// <param name="entity"></param>
     /// <returns></returns>
     Task UpdateAsync<TEntity>(TEntity entity) where TEntity : class;
 
+    /// <summary>
+    /// Delete an existing item matching the ID
+    /// </summary>
+    /// <typeparam name="TEntity"></typeparam>
+    /// <param name="entity"></param>
+    /// <returns></returns>
     Task DeleteAsync<TEntity>(TEntity entity) where TEntity : class;
 }
