@@ -1,6 +1,6 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 using System.Threading.Tasks;
+using UserManagement.Models;
 using UserManagement.Services.Domain.Interfaces;
 using UserManagement.Web.Models.Users;
 
@@ -43,5 +43,21 @@ public class UsersController : Controller
     public IActionResult Add() => View();
 
     [HttpPost("add")]
-    public Task<IActionResult> Add(UserFormViewModel model) => throw new NotImplementedException();
+    public async Task<IActionResult> Add(UserFormViewModel model)
+    {
+        if (!ModelState.IsValid) return View(model);
+
+        var user = new User
+        {
+            Forename = model.Forename,
+            Surname = model.Surname,
+            Email = model.Email,
+            DateOfBirth = model.DateOfBirth!.Value,
+            IsActive = model.IsActive
+        };
+
+        await _userService.CreateAsync(user);
+
+        return RedirectToAction(nameof(List));
+    }
 }

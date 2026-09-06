@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using UserManagement.Data;
@@ -25,5 +24,5 @@ public class UserService : IUserService
 
     public Task<User?> GetByIdAsync(long id) => _dataAccess.GetByIdAsync<User>(id);
 
-    public Task CreateAsync(User user) => throw new NotImplementedException();
+    public Task CreateAsync(User user) => _dataAccess.CreateAsync(user);
 }

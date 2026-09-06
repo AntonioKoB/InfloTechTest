@@ -1,0 +1,41 @@
+@model UserManagement.Web.Models.Users.UserFormViewModel
+
+<h2>Add User</h2>
+
+<form asp-controller="Users" asp-action="Add" method="post">
+    <div asp-validation-summary="All" class="text-danger"></div>
+
+    <div class="form-group">
+        <label asp-for="Forename"></label>
+        <input asp-for="Forename" class="form-control" />
+        <span asp-validation-for="Forename" class="text-danger"></span>
+    </div>
+
+    <div class="form-group">
+        <label asp-for="Surname"></label>
+        <input asp-for="Surname" class="form-control" />
+        <span asp-validation-for="Surname" class="text-danger"></span>
+    </div>
+
+    <div class="form-group">
+        <label asp-for="Email"></label>
+        <input asp-for="Email" class="form-control" />
+        <span asp-validation-for="Email" class="text-danger"></span>
+    </div>
+
+    <div class="form-group">
+        <label asp-for="DateOfBirth"></label>
+        <input asp-for="DateOfBirth" type="date" class="form-control" />
+        <span asp-validation-for="DateOfBirth" class="text-danger"></span>
+    </div>
+
+    <div class="form-check">
+        <input asp-for="IsActive" class="form-check-input" />
+        <label asp-for="IsActive" class="form-check-label"></label>
+    </div>
+
+    <br />
+
+    <button type="submit" class="btn btn-primary">Add User</button>
+    <a asp-controller="Users" asp-action="List" class="btn btn-default">Cancel</a>
+</form>
