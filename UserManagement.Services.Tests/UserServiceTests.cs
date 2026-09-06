@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using UserManagement.Models;
@@ -49,7 +50,7 @@ public class UserServiceTests
         result.Should().BeEquivalentTo(nonActiveUsers);
     }
 
-    private IEnumerable<User> SetupUsers(string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true)
+    private IEnumerable<User> SetupUsers(string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null)
     {
         var users = new[]
         {
@@ -58,7 +59,8 @@ public class UserServiceTests
                 Forename = forename,
                 Surname = surname,
                 Email = email,
-                IsActive = isActive
+                IsActive = isActive,
+                DateOfBirth = dateOfBirth ?? new DateOnly(1990, 1, 1)
             }
         };
 
@@ -71,8 +73,8 @@ public class UserServiceTests
 
     private (User[] ActiveUsers, User[] NonActiveUsers) SetupMixedUsers()
     {
-        var activeUser = new User { Forename = "Johnny", Surname = "User", Email = "juser@example.com", IsActive = true };
-        var nonActiveUser = new User { Forename = "Jane", Surname = "NonUser", Email = "jnonuser@example.com", IsActive = false };
+        var activeUser = new User { Forename = "Johnny", Surname = "User", Email = "juser@example.com", IsActive = true, DateOfBirth = new DateOnly(1990, 1, 1) };
+        var nonActiveUser = new User { Forename = "Jane", Surname = "NonUser", Email = "jnonuser@example.com", IsActive = false, DateOfBirth = new DateOnly(1985, 6, 15) };
 
         var users = new[] { activeUser, nonActiveUser };
 

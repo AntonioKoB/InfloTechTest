@@ -4,7 +4,7 @@ namespace UserManagement.Web.Models.Users;
 
 public class UserListViewModel
 {
-    public List<UserListItemViewModel> Items { get; set; } = new();
+    public List<UserListItemViewModel> Items { get; set; } = [];
 }
 
 public class UserListItemViewModel
