@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq.Expressions;
 using System.Threading.Tasks;
 
 namespace UserManagement.Data;
@@ -19,6 +21,14 @@ public interface IDataContext
     /// <param name="id"></param>
     /// <returns></returns>
     Task<TEntity?> GetByIdAsync<TEntity>(object id) where TEntity : class;
+
+    /// <summary>
+    /// Get the first item matching the given predicate, or null if none exists
+    /// </summary>
+    /// <typeparam name="TEntity"></typeparam>
+    /// <param name="predicate"></param>
+    /// <returns></returns>
+    Task<TEntity?> FirstOrDefaultAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class;
 
     /// <summary>
     /// Create a new item

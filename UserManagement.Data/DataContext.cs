@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using UserManagement.Models;
@@ -8,13 +9,26 @@ namespace UserManagement.Data;
 
 public class DataContext : DbContext, IDataContext
 {
-    public DataContext() => Database.EnsureCreated();
+    private readonly string _databaseName;
+
+    public DataContext() : this("UserManagement.Data.DataContext")
+    {
+    }
+
+    public DataContext(string databaseName)
+    {
+        _databaseName = databaseName;
+        Database.EnsureCreated();
+    }
 
     protected override void OnConfiguring(DbContextOptionsBuilder options)
-        => options.UseInMemoryDatabase("UserManagement.Data.DataContext");
+        => options.UseInMemoryDatabase(_databaseName);
 
     protected override void OnModelCreating(ModelBuilder model)
-        => model.Entity<User>().HasData(new[]
+    {
+        model.Entity<User>().HasAlternateKey(u => u.Email);
+
+        model.Entity<User>().HasData(new[]
         {
             new User { Id = 1, Forename = "Peter", Surname = "Loew", Email = "ploew@example.com", IsActive = true, DateOfBirth = new DateOnly(1955, 3, 22) },
             new User { Id = 2, Forename = "Benjamin Franklin", Surname = "Gates", Email = "bfgates@example.com", IsActive = true, DateOfBirth = new DateOnly(1968, 7, 15) },
@@ -28,6 +42,7 @@ public class DataContext : DbContext, IDataContext
             new User { Id = 10, Forename = "Johnny", Surname = "Blaze", Email = "jblaze@example.com", IsActive = true, DateOfBirth = new DateOnly(1980, 6, 21) },
             new User { Id = 11, Forename = "Robin", Surname = "Feld", Email = "rfeld@example.com", IsActive = true, DateOfBirth = new DateOnly(1963, 1, 9) },
         });
+    }
 
     public DbSet<User>? Users { get; set; }
 
@@ -36,6 +51,9 @@ public class DataContext : DbContext, IDataContext
 
     public async Task<TEntity?> GetByIdAsync<TEntity>(object id) where TEntity : class
         => await base.Set<TEntity>().FindAsync(id);
+
+    public async Task<TEntity?> FirstOrDefaultAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class
+        => await base.Set<TEntity>().FirstOrDefaultAsync(predicate);
 
     public Task CreateAsync<TEntity>(TEntity entity) where TEntity : class
         => PersistAsync(() => base.Add(entity));

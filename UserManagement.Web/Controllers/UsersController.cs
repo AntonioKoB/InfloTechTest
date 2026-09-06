@@ -1,5 +1,6 @@
 ﻿using System.Linq;
 using System.Threading.Tasks;
+using UserManagement.Services.Domain.Exceptions;
 using UserManagement.Services.Domain.Interfaces;
 using UserManagement.Web.Models.Users;
 
@@ -29,12 +30,33 @@ public class UsersController : Controller
         return View(model);
     }
 
-    [HttpGet("{id}")]
+    [HttpGet("{id:long}")]
     public async Task<IActionResult> View(long id)
     {
         var user = await _userService.GetByIdAsync(id);
         if (user is null) return View("UserNotFound", id);
 
         return View(user.ToViewModel());
+    }
+
+    [HttpGet("add")]
+    public IActionResult Add() => View();
+
+    [HttpPost("add")]
+    public async Task<IActionResult> Add(UserFormViewModel model)
+    {
+        if (!ModelState.IsValid) return View(model);
+
+        try
+        {
+            await _userService.CreateAsync(model.ToUser());
+        }
+        catch (EmailAlreadyExistsException)
+        {
+            ModelState.AddModelError(nameof(UserFormViewModel.Email), "A user with this email already exists.");
+            return View(model);
+        }
+
+        return RedirectToAction(nameof(List));
     }
 }

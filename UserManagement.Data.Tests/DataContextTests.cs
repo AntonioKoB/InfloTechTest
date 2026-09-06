@@ -60,6 +60,58 @@ public class DataContextTests
     }
 
     [Fact]
+    public async Task FirstOrDefaultAsync_WhenPredicateMatchesEntity_MustReturnEntity()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var context = CreateContext();
+        var expected = (await context.GetAllAsync<User>()).First();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await context.FirstOrDefaultAsync<User>(u => u.Email == expected.Email);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeEquivalentTo(expected);
+    }
+
+    [Fact]
+    public async Task FirstOrDefaultAsync_WhenNoEntityMatchesPredicate_MustReturnNull()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var context = CreateContext();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await context.FirstOrDefaultAsync<User>(u => u.Email == "nonexistent@example.com");
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenEmailAlreadyExists_MustThrow()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var context = CreateContext();
+        var existing = (await context.GetAllAsync<User>()).First();
+
+        var duplicate = new User
+        {
+            Forename = "Someone",
+            Surname = "Else",
+            Email = existing.Email,
+            DateOfBirth = new DateOnly(1990, 1, 1)
+        };
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var act = () => context.CreateAsync(duplicate);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        // EF Core's InMemory provider enforces alternate keys eagerly when the entity is tracked
+        // (InvalidOperationException), rather than at SaveChanges like a real relational provider
+        // would (DbUpdateException) - either way, the duplicate is rejected before it can persist.
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
     public async Task GetAllAsync_WhenUpdated_MustReflectUpdatedEntity()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
@@ -92,5 +144,5 @@ public class DataContextTests
         result.Should().NotContain(s => s.Email == entity.Email);
     }
 
-    private DataContext CreateContext() => new();
+    private DataContext CreateContext() => new(Guid.NewGuid().ToString());
 }
