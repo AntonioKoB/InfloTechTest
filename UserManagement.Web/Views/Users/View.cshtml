@@ -1,0 +1,25 @@
+@model UserManagement.Web.Models.Users.UserListItemViewModel
+
+<h2>User Details</h2>
+
+<dl>
+    <dt>Id</dt>
+    <dd>@Model.Id</dd>
+
+    <dt>Forename</dt>
+    <dd>@Model.Forename</dd>
+
+    <dt>Surname</dt>
+    <dd>@Model.Surname</dd>
+
+    <dt>Email</dt>
+    <dd>@Model.Email</dd>
+
+    <dt>Date of Birth</dt>
+    <dd>@Model.DateOfBirth.ToString("dd MMM yyyy")</dd>
+
+    <dt>Account Active</dt>
+    <dd>@(Model.IsActive ? "Yes" : "No")</dd>
+</dl>
+
+<a asp-controller="Users" asp-action="List" class="btn btn-default">Back to List</a>

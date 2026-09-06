@@ -1,5 +1,4 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 using System.Threading.Tasks;
 using UserManagement.Services.Domain.Interfaces;
 using UserManagement.Web.Models.Users;
@@ -31,5 +30,11 @@ public class UsersController : Controller
     }
 
     [HttpGet("{id}")]
-    public Task<IActionResult> View(long id) => throw new NotImplementedException();
+    public async Task<IActionResult> View(long id)
+    {
+        var user = await _userService.GetByIdAsync(id);
+        if (user is null) return NotFound();
+
+        return View(user.ToListItemViewModel());
+    }
 }
