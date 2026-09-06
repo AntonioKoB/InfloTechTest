@@ -26,7 +26,7 @@ public class DataContext : DbContext, IDataContext
 
     protected override void OnModelCreating(ModelBuilder model)
     {
-        model.Entity<User>().HasAlternateKey(u => u.Email);
+        model.Entity<User>().HasIndex(u => u.Email).IsUnique();
 
         model.Entity<User>().HasData(new[]
         {

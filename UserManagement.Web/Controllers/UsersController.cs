@@ -79,11 +79,24 @@ public class UsersController : Controller
     [HttpPost("edit/{id:long}")]
     public async Task<IActionResult> Edit(long id, UserFormViewModel model)
     {
+        var existingUser = await _userService.GetByIdAsync(id);
+        if (existingUser is null) return View("UserNotFound", id);
+
         SetFormViewData(nameof(Edit), id);
 
         if (!ModelState.IsValid) return View("UserForm", model);
 
-        await _userService.UpdateAsync(model.ToUser(id));
+        model.ApplyTo(existingUser);
+
+        try
+        {
+            await _userService.UpdateAsync(existingUser);
+        }
+        catch (EmailAlreadyExistsException)
+        {
+            ModelState.AddModelError(nameof(UserFormViewModel.Email), "A user with this email already exists.");
+            return View("UserForm", model);
+        }
 
         return RedirectToAction(nameof(List));
     }

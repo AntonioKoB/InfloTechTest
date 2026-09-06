@@ -198,10 +198,39 @@ public class UserControllerTests
     }
 
     [Fact]
+    public async Task Edit_WhenSubmittingToNonExistentUser_MustReturnUserNotFoundView()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var controller = CreateController();
+        _userService
+            .Setup(s => s.GetByIdAsync(999))
+            .ReturnsAsync((User?)null);
+        var model = new UserFormViewModel
+        {
+            Forename = "Updated",
+            Surname = "User",
+            Email = "updated@example.com",
+            DateOfBirth = new DateOnly(1995, 4, 12),
+            IsActive = true
+        };
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await controller.Edit(999, model);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeOfType<ViewResult>()
+            .Which.ViewName.Should().Be("UserNotFound");
+        _userService.Verify(s => s.UpdateAsync(It.IsAny<User>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Edit_WhenModelStateIsInvalid_MustReturnViewWithModel()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var controller = CreateController();
+        _userService
+            .Setup(s => s.GetByIdAsync(5))
+            .ReturnsAsync(new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1) });
         controller.ModelState.AddModelError("Email", "The Email field is required.");
         var model = new UserFormViewModel();
 
@@ -219,6 +248,9 @@ public class UserControllerTests
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var controller = CreateController();
+        _userService
+            .Setup(s => s.GetByIdAsync(5))
+            .ReturnsAsync(new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1) });
         var model = new UserFormViewModel
         {
             Forename = "Updated",
@@ -241,6 +273,36 @@ public class UserControllerTests
             u.IsActive == model.IsActive)), Times.Once);
         result.Should().BeOfType<RedirectToActionResult>()
             .Which.ActionName.Should().Be(nameof(UsersController.List));
+    }
+
+    [Fact]
+    public async Task Edit_WhenEmailAlreadyExistsOnAnotherUser_MustReturnViewWithModelStateError()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var controller = CreateController();
+        _userService
+            .Setup(s => s.GetByIdAsync(5))
+            .ReturnsAsync(new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1) });
+        var model = new UserFormViewModel
+        {
+            Forename = "Updated",
+            Surname = "User",
+            Email = "taken@example.com",
+            DateOfBirth = new DateOnly(1995, 4, 12),
+            IsActive = true
+        };
+        _userService
+            .Setup(s => s.UpdateAsync(It.IsAny<User>()))
+            .ThrowsAsync(new EmailAlreadyExistsException(model.Email));
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await controller.Edit(5, model);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeOfType<ViewResult>()
+            .Which.Model.Should().BeSameAs(model);
+        controller.ModelState.IsValid.Should().BeFalse();
+        controller.ModelState[nameof(UserFormViewModel.Email)]!.Errors.Should().NotBeEmpty();
     }
 
     private User SetupUser(string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null)

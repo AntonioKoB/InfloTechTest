@@ -79,8 +79,8 @@ public class DataContextTests
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         // This is a regression test matching the real UserService.UpdateAsync flow exactly: it looks up the
         // existing user by email (to enforce uniqueness) and then calls UpdateAsync with a *different*,
-        // freshly-built User instance for the same row. If FirstOrDefaultAsync tracked its result, EF's
-        // alternate-key tracker would reject attaching that second instance for the same Email - which is
+        // freshly-built User instance for the same row (same Id). If FirstOrDefaultAsync tracked its result,
+        // EF's identity map would reject attaching that second instance for the same primary key - which is
         // exactly what happened manually testing Edit before this was fixed. Deliberately uses no other
         // lookup beforehand (e.g. GetAllAsync), since that would track its own results and mask what's
         // actually being tested here.
@@ -119,9 +119,17 @@ public class DataContextTests
     }
 
     [Fact]
-    public async Task CreateAsync_WhenEmailAlreadyExists_MustThrow()
+    public async Task CreateAsync_WhenEmailAlreadyExists_InMemoryProviderDoesNotEnforceTheUniqueIndex()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Email is modelled as a unique index (HasIndex(...).IsUnique()), not an alternate key - a key
+        // would make Email immutable on tracked entities (EF refuses to let you modify a property that's
+        // part of a key), which breaks Edit letting someone change their email to a new address. The
+        // tradeoff: EF Core's InMemory provider does not actually enforce plain unique indexes (unlike a
+        // real relational provider, which would reject this at SaveChanges with a unique-constraint
+        // violation). Uniqueness is therefore solely UserService's responsibility for as long as this app
+        // runs on InMemory - this test documents that explicitly rather than leaving it as a silent gap.
+        // Revisit once point 5 swaps in a real database, where the index will actually be enforced.
         var context = CreateContext();
         var existing = (await context.GetAllAsync<User>()).First();
 
@@ -137,10 +145,29 @@ public class DataContextTests
         var act = () => context.CreateAsync(duplicate);
 
         // Assert: Verifies that the action of the method under test behaves as expected.
-        // EF Core's InMemory provider enforces alternate keys eagerly when the entity is tracked
-        // (InvalidOperationException), rather than at SaveChanges like a real relational provider
-        // would (DbUpdateException) - either way, the duplicate is rejected before it can persist.
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenEmailChangedToNewUniqueValue_MustPersistNewEmail()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Regression test for the real bug: Email used to be an alternate key, which made EF refuse to
+        // persist any change to it on a tracked entity ("The property 'User.Email' is part of a key and
+        // so cannot be modified"). Fetches via GetByIdAsync (the same tracked instance the Edit flow
+        // mutates in place) to exercise this exactly as the controller does.
+        var context = CreateContext();
+        var entity = (await context.GetAllAsync<User>()).First();
+        var tracked = await context.GetByIdAsync<User>(entity.Id);
+        tracked!.Email = "brandnewemail@example.com";
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var act = () => context.UpdateAsync(tracked);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        await act.Should().NotThrowAsync();
+        var result = await context.GetAllAsync<User>();
+        result.Should().Contain(u => u.Email == "brandnewemail@example.com");
     }
 
     [Fact]
