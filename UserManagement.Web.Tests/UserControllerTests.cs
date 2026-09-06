@@ -91,6 +91,51 @@ public class UserControllerTests
             .Which.ViewName.Should().Be("UserNotFound");
     }
 
+    [Fact]
+    public async Task Add_WhenModelStateIsInvalid_MustReturnViewWithModel()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var controller = CreateController();
+        controller.ModelState.AddModelError("Email", "The Email field is required.");
+        var model = new UserFormViewModel();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await controller.Add(model);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeOfType<ViewResult>()
+            .Which.Model.Should().BeSameAs(model);
+        _userService.Verify(s => s.CreateAsync(It.IsAny<User>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Add_WhenModelStateIsValid_MustCreateUserAndRedirectToList()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var controller = CreateController();
+        var model = new UserFormViewModel
+        {
+            Forename = "Brand New",
+            Surname = "User",
+            Email = "brandnewuser@example.com",
+            DateOfBirth = new DateOnly(1995, 4, 12),
+            IsActive = true
+        };
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await controller.Add(model);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        _userService.Verify(s => s.CreateAsync(It.Is<User>(u =>
+            u.Forename == model.Forename &&
+            u.Surname == model.Surname &&
+            u.Email == model.Email &&
+            u.DateOfBirth == model.DateOfBirth &&
+            u.IsActive == model.IsActive)), Times.Once);
+        result.Should().BeOfType<RedirectToActionResult>()
+            .Which.ActionName.Should().Be(nameof(UsersController.List));
+    }
+
     private User SetupUser(string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null)
     {
         var user = new User

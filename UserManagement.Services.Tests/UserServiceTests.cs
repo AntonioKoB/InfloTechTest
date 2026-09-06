@@ -80,6 +80,26 @@ public class UserServiceTests
         result.Should().BeNull();
     }
 
+    [Fact]
+    public async Task CreateAsync_WhenCalled_MustPersistViaDataContext()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var service = CreateService();
+        var user = new User
+        {
+            Forename = "Brand New",
+            Surname = "User",
+            Email = "brandnewuser@example.com",
+            DateOfBirth = new DateOnly(1995, 4, 12)
+        };
+
+        // Act: Invokes the method under test with the arranged parameters.
+        await service.CreateAsync(user);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        _dataContext.Verify(s => s.CreateAsync(user), Times.Once);
+    }
+
     private User SetupUser(long id = 1, string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null)
     {
         var user = new User

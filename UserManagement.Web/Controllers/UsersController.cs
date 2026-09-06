@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Threading.Tasks;
 using UserManagement.Services.Domain.Interfaces;
 using UserManagement.Web.Models.Users;
@@ -37,4 +38,10 @@ public class UsersController : Controller
 
         return View(user.ToViewModel());
     }
+
+    [HttpGet("add")]
+    public IActionResult Add() => View();
+
+    [HttpPost("add")]
+    public Task<IActionResult> Add(UserFormViewModel model) => throw new NotImplementedException();
 }

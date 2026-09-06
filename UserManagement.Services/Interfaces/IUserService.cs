@@ -20,4 +20,11 @@ public interface IUserService
     /// <param name="id"></param>
     /// <returns></returns>
     Task<User?> GetByIdAsync(long id);
+
+    /// <summary>
+    /// Create a new user
+    /// </summary>
+    /// <param name="user"></param>
+    /// <returns></returns>
+    Task CreateAsync(User user);
 }
