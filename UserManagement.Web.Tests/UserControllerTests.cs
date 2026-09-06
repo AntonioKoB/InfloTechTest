@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using UserManagement.Models;
 using UserManagement.Services.Domain.Interfaces;
 using UserManagement.Web.Models.Users;
@@ -8,14 +9,14 @@ namespace UserManagement.Data.Tests;
 public class UserControllerTests
 {
     [Fact]
-    public void List_WhenServiceReturnsUsers_ModelMustContainUsers()
+    public async Task List_WhenServiceReturnsUsers_ModelMustContainUsers()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var controller = CreateController();
         var users = SetupUsers();
 
         // Act: Invokes the method under test with the arranged parameters.
-        var result = controller.List();
+        var result = await controller.List();
 
         // Assert: Verifies that the action of the method under test behaves as expected.
         result.Model
@@ -24,14 +25,14 @@ public class UserControllerTests
     }
 
     [Fact]
-    public void List_WhenFilterIsActive_MustReturnOnlyActiveUsers()
+    public async Task List_WhenFilterIsActive_MustReturnOnlyActiveUsers()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var controller = CreateController();
         var users = SetupActiveUsers();
 
         // Act: Invokes the method under test with the arranged parameters.
-        var result = controller.List(UserListFilter.Active);
+        var result = await controller.List(UserListFilter.Active);
 
         // Assert: Verifies that the action of the method under test behaves as expected.
         result.Model
@@ -40,14 +41,14 @@ public class UserControllerTests
     }
 
     [Fact]
-    public void List_WhenFilterIsNonActive_MustReturnOnlyNonActiveUsers()
+    public async Task List_WhenFilterIsNonActive_MustReturnOnlyNonActiveUsers()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var controller = CreateController();
         var users = SetupNonActiveUsers();
 
         // Act: Invokes the method under test with the arranged parameters.
-        var result = controller.List(UserListFilter.NonActive);
+        var result = await controller.List(UserListFilter.NonActive);
 
         // Assert: Verifies that the action of the method under test behaves as expected.
         result.Model
@@ -69,8 +70,8 @@ public class UserControllerTests
         };
 
         _userService
-            .Setup(s => s.GetAll())
-            .Returns(users);
+            .Setup(s => s.GetAllAsync())
+            .ReturnsAsync(users);
 
         return users;
     }
@@ -89,8 +90,8 @@ public class UserControllerTests
         };
 
         _userService
-            .Setup(s => s.FilterByActive(true))
-            .Returns(users);
+            .Setup(s => s.FilterByActiveAsync(true))
+            .ReturnsAsync(users);
 
         return users;
     }
@@ -109,8 +110,8 @@ public class UserControllerTests
         };
 
         _userService
-            .Setup(s => s.FilterByActive(false))
-            .Returns(users);
+            .Setup(s => s.FilterByActiveAsync(false))
+            .ReturnsAsync(users);
 
         return users;
     }

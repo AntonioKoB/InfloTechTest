@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using UserManagement.Models;
 
@@ -29,8 +30,8 @@ public class DataContext : DbContext, IDataContext
 
     public DbSet<User>? Users { get; set; }
 
-    public IQueryable<TEntity> GetAll<TEntity>() where TEntity : class
-        => base.Set<TEntity>();
+    public async Task<IEnumerable<TEntity>> GetAllAsync<TEntity>() where TEntity : class
+        => await base.Set<TEntity>().ToListAsync();
 
     public void Create<TEntity>(TEntity entity) where TEntity : class
     {

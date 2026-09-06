@@ -1,4 +1,5 @@
 ﻿using System.Linq;
+using System.Threading.Tasks;
 using UserManagement.Services.Domain.Interfaces;
 using UserManagement.Web.Models.Users;
 
@@ -11,13 +12,13 @@ public class UsersController : Controller
     public UsersController(IUserService userService) => _userService = userService;
 
     [HttpGet]
-    public ViewResult List(UserListFilter filter = UserListFilter.All)
+    public async Task<ViewResult> List(UserListFilter filter = UserListFilter.All)
     {
         var users = filter switch
         {
-            UserListFilter.Active => _userService.FilterByActive(true),
-            UserListFilter.NonActive => _userService.FilterByActive(false),
-            _ => _userService.GetAll()
+            UserListFilter.Active => await _userService.FilterByActiveAsync(true),
+            UserListFilter.NonActive => await _userService.FilterByActiveAsync(false),
+            _ => await _userService.GetAllAsync()
         };
 
         var items = users.Select(p => new UserListItemViewModel
