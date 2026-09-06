@@ -21,4 +21,6 @@ public class UserService : IUserService
         => (await _dataAccess.GetAllAsync<User>()).Where(u => u.IsActive == isActive);
 
     public Task<IEnumerable<User>> GetAllAsync() => _dataAccess.GetAllAsync<User>();
+
+    public Task<User?> GetByIdAsync(long id) => _dataAccess.GetByIdAsync<User>(id);
 }

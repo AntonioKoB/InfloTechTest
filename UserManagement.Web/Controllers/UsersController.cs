@@ -28,4 +28,13 @@ public class UsersController : Controller
 
         return View(model);
     }
+
+    [HttpGet("{id}")]
+    public async Task<IActionResult> View(long id)
+    {
+        var user = await _userService.GetByIdAsync(id);
+        if (user is null) return View("UserNotFound", id);
+
+        return View(user.ToViewModel());
+    }
 }
