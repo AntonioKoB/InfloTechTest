@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Threading.Tasks;
 using UserManagement.Services.Domain.Exceptions;
 using UserManagement.Services.Domain.Interfaces;
@@ -59,4 +60,10 @@ public class UsersController : Controller
 
         return RedirectToAction(nameof(List));
     }
+
+    [HttpGet("edit/{id:long}")]
+    public Task<IActionResult> Edit(long id) => throw new NotImplementedException();
+
+    [HttpPost("edit/{id:long}")]
+    public Task<IActionResult> Edit(long id, UserFormViewModel model) => throw new NotImplementedException();
 }

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using UserManagement.Data;
@@ -37,4 +38,6 @@ public class UserService : IUserService
 
         await _dataAccess.CreateAsync(user);
     }
+
+    public Task UpdateAsync(User user) => throw new NotImplementedException();
 }
