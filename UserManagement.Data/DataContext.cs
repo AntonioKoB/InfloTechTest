@@ -53,7 +53,7 @@ public class DataContext : DbContext, IDataContext
         => await base.Set<TEntity>().FindAsync(id);
 
     public async Task<TEntity?> FirstOrDefaultAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class
-        => await base.Set<TEntity>().FirstOrDefaultAsync(predicate);
+        => await base.Set<TEntity>().AsNoTracking().FirstOrDefaultAsync(predicate);
 
     public Task CreateAsync<TEntity>(TEntity entity) where TEntity : class
         => PersistAsync(() => base.Add(entity));

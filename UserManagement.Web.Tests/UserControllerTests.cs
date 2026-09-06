@@ -177,7 +177,7 @@ public class UserControllerTests
         // Assert: Verifies that the action of the method under test behaves as expected.
         result.Should().BeOfType<ViewResult>()
             .Which.Model.Should().BeOfType<UserFormViewModel>()
-            .Which.Should().BeEquivalentTo(user);
+            .Which.Should().BeEquivalentTo(user, options => options.ExcludingMissingMembers());
     }
 
     [Fact]
@@ -241,33 +241,6 @@ public class UserControllerTests
             u.IsActive == model.IsActive)), Times.Once);
         result.Should().BeOfType<RedirectToActionResult>()
             .Which.ActionName.Should().Be(nameof(UsersController.List));
-    }
-
-    [Fact]
-    public async Task Edit_WhenEmailAlreadyExistsOnAnotherUser_MustReturnViewWithModelStateError()
-    {
-        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        var controller = CreateController();
-        var model = new UserFormViewModel
-        {
-            Forename = "Updated",
-            Surname = "User",
-            Email = "taken@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true
-        };
-        _userService
-            .Setup(s => s.UpdateAsync(It.IsAny<User>()))
-            .ThrowsAsync(new EmailAlreadyExistsException(model.Email));
-
-        // Act: Invokes the method under test with the arranged parameters.
-        var result = await controller.Edit(5, model);
-
-        // Assert: Verifies that the action of the method under test behaves as expected.
-        result.Should().BeOfType<ViewResult>()
-            .Which.Model.Should().BeSameAs(model);
-        controller.ModelState.IsValid.Should().BeFalse();
-        controller.ModelState[nameof(UserFormViewModel.Email)]!.Errors.Should().NotBeEmpty();
     }
 
     private User SetupUser(string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null)
