@@ -1,5 +1,4 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 using System.Threading.Tasks;
 using UserManagement.Services.Domain.Exceptions;
 using UserManagement.Services.Domain.Interfaces;
@@ -103,11 +102,19 @@ public class UsersController : Controller
     }
 
     [HttpGet("delete/{id:long}")]
-    public Task<IActionResult> Delete(long id) => throw new NotImplementedException();
+    public async Task<IActionResult> Delete(long id)
+    {
+        var user = await _userService.GetByIdAsync(id);
+        return View(user!.ToViewModel());
+    }
 
     [HttpDelete("delete/{id:long}")]
     [ActionName(nameof(Delete))]
-    public Task<IActionResult> DeleteConfirmed(long id) => throw new NotImplementedException();
+    public async Task<IActionResult> DeleteConfirmed(long id)
+    {
+        await _userService.DeleteAsync(id);
+        return Ok();
+    }
 
     private void SetFormViewData(string formAction, long? userId = null)
     {

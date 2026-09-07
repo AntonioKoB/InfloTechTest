@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using UserManagement.Data;
@@ -50,5 +49,9 @@ public class UserService : IUserService
         await _dataAccess.UpdateAsync(user);
     }
 
-    public Task DeleteAsync(long id) => throw new NotImplementedException();
+    public async Task DeleteAsync(long id)
+    {
+        var user = await GetByIdAsync(id);
+        await _dataAccess.DeleteAsync(user!);
+    }
 }

@@ -322,7 +322,7 @@ public class UserControllerTests
     }
 
     [Fact]
-    public async Task DeleteConfirmed_MustDeleteUserAndRedirectToList()
+    public async Task DeleteConfirmed_MustDeleteUserAndReturnOk()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var controller = CreateController();
@@ -332,8 +332,7 @@ public class UserControllerTests
 
         // Assert: Verifies that the action of the method under test behaves as expected.
         _userService.Verify(s => s.DeleteAsync(5), Times.Once);
-        result.Should().BeOfType<RedirectToActionResult>()
-            .Which.ActionName.Should().Be(nameof(UsersController.List));
+        result.Should().BeOfType<OkResult>();
     }
 
     private User SetupUser(string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null)
