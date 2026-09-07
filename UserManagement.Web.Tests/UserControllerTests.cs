@@ -76,6 +76,31 @@ public class UserControllerTests
     }
 
     [Fact]
+    public async Task View_WhenUserExists_MustRecordViewedLogAndPopulateLogsFromService()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var controller = CreateController();
+        var user = SetupUser();
+        var logs = new[]
+        {
+            new UserLog { Id = 1, UserId = user.Id, Action = UserLogAction.Created, Timestamp = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc) }
+        };
+        _userLogService.Setup(s => s.GetForUserAsync(user.Id)).ReturnsAsync(logs);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await controller.View(user.Id);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        _userLogService.Verify(s => s.RecordAsync(user.Id, UserLogAction.Viewed, null, user), Times.Once);
+        result.Should().BeOfType<ViewResult>()
+            .Which.Model.Should().BeOfType<UserViewModel>()
+            .Which.Logs.Should().BeEquivalentTo(new[]
+            {
+                new UserLogEntryViewModel { Action = UserLogAction.Created, Timestamp = logs[0].Timestamp }
+            });
+    }
+
+    [Fact]
     public async Task View_WhenUserDoesNotExist_MustReturnUserNotFoundView()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
@@ -434,5 +459,10 @@ public class UserControllerTests
     }
 
     private readonly Mock<IUserService> _userService = new();
-    private UsersController CreateController() => new(_userService.Object);
+    private readonly Mock<IUserLogService> _userLogService = new();
+    private UsersController CreateController()
+    {
+        _userLogService.Setup(s => s.GetForUserAsync(It.IsAny<long>())).ReturnsAsync([]);
+        return new(_userService.Object, _userLogService.Object);
+    }
 }

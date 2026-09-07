@@ -10,7 +10,12 @@ namespace UserManagement.WebMS.Controllers;
 public class UsersController : Controller
 {
     private readonly IUserService _userService;
-    public UsersController(IUserService userService) => _userService = userService;
+    private readonly IUserLogService _userLogService;
+    public UsersController(IUserService userService, IUserLogService userLogService)
+    {
+        _userService = userService;
+        _userLogService = userLogService;
+    }
 
     [HttpGet]
     public async Task<ViewResult> List(UserListFilter filter = UserListFilter.All)
