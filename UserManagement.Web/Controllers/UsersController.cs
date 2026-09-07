@@ -1,6 +1,5 @@
 ﻿using System.Linq;
 using System.Threading.Tasks;
-using UserManagement.Models;
 using UserManagement.Services.Domain.Exceptions;
 using UserManagement.Services.Domain.Interfaces;
 using UserManagement.Web.Models.Users;
@@ -39,10 +38,9 @@ public class UsersController : Controller
     [HttpGet("{id:long}")]
     public async Task<IActionResult> View(long id)
     {
-        var user = await _userService.GetByIdAsync(id);
+        var user = await _userService.GetByIdAsync(id, recordAsViewed: true);
         if (user is null) return View("UserNotFound", id);
 
-        await _userLogService.RecordAsync(user.Id, UserLogAction.Viewed, before: null, after: user);
         var logs = await _userLogService.GetForUserAsync(id);
 
         var model = user.ToViewModel();

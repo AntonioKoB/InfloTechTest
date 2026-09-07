@@ -8,11 +8,10 @@ using UserManagement.Services.Domain.Interfaces;
 namespace UserManagement.Services.Domain.Implementations;
 
 /// <summary>
-/// Decorates IUserService, recording an audit log entry for every successful Create/Update/Delete.
-/// GetByIdAsync is deliberately not audited here - it's shared by the View screen, Edit's form pre-fill,
-/// Edit's own re-fetch before saving, and Delete's confirmation screen, and the decorator can't tell which
-/// of these a call is for. Only the View controller action records "Viewed" explicitly, since it's the one
-/// unambiguous case.
+/// Decorates IUserService, recording an audit log entry for every successful Create/Update/Delete, and for
+/// GetByIdAsync calls that opt in via recordAsViewed. GetByIdAsync is shared by the View screen, Edit's form
+/// pre-fill, Edit's own re-fetch before saving, and Delete's confirmation screen - only the caller knows
+/// which of these it is, so it says so via recordAsViewed rather than the decorator guessing from context.
 /// </summary>
 public class AuditingUserService : IUserService
 {
@@ -30,7 +29,13 @@ public class AuditingUserService : IUserService
     public Task<IEnumerable<User>> FilterByActiveAsync(bool isActive) => _inner.FilterByActiveAsync(isActive);
     public Task<IEnumerable<User>> GetAllAsync() => _inner.GetAllAsync();
     public Task<User?> GetByEmailAsync(string email) => _inner.GetByEmailAsync(email);
-    public Task<User?> GetByIdAsync(long id) => _inner.GetByIdAsync(id);
+    public async Task<User?> GetByIdAsync(long id, bool recordAsViewed = false)
+    {
+        var user = await _inner.GetByIdAsync(id, recordAsViewed);
+        if (recordAsViewed && user is not null)
+            await _userLogService.RecordAsync(user.Id, UserLogAction.Viewed, before: null, after: user);
+        return user;
+    }
 
     public async Task CreateAsync(User user)
     {

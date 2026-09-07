@@ -76,9 +76,12 @@ public class UserControllerTests
     }
 
     [Fact]
-    public async Task View_WhenUserExists_MustRecordViewedLogAndPopulateLogsFromService()
+    public async Task View_WhenUserExists_MustFetchWithRecordAsViewedAndPopulateLogsFromService()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Whether a "Viewed" log entry actually gets recorded is AuditingUserService's decision, driven by
+        // this flag (see AuditingUserServiceTests) - the controller's only job is to say this fetch is a
+        // genuine view, not to record anything itself.
         var controller = CreateController();
         var user = SetupUser();
         var logs = new[]
@@ -91,7 +94,7 @@ public class UserControllerTests
         var result = await controller.View(user.Id);
 
         // Assert: Verifies that the action of the method under test behaves as expected.
-        _userLogService.Verify(s => s.RecordAsync(user.Id, UserLogAction.Viewed, null, user), Times.Once);
+        _userService.Verify(s => s.GetByIdAsync(user.Id, true), Times.Once);
         result.Should().BeOfType<ViewResult>()
             .Which.Model.Should().BeOfType<UserViewModel>()
             .Which.Logs.Should().BeEquivalentTo(new[]
@@ -106,7 +109,7 @@ public class UserControllerTests
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var controller = CreateController();
         _userService
-            .Setup(s => s.GetByIdAsync(It.IsAny<long>()))
+            .Setup(s => s.GetByIdAsync(It.IsAny<long>(), It.IsAny<bool>()))
             .ReturnsAsync((User?)null);
 
         // Act: Invokes the method under test with the arranged parameters.
@@ -389,7 +392,7 @@ public class UserControllerTests
         };
 
         _userService
-            .Setup(s => s.GetByIdAsync(user.Id))
+            .Setup(s => s.GetByIdAsync(user.Id, It.IsAny<bool>()))
             .ReturnsAsync(user);
 
         return user;

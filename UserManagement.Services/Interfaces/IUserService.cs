@@ -18,8 +18,13 @@ public interface IUserService
     /// Return a single user matching the given ID, or null if none exists
     /// </summary>
     /// <param name="id"></param>
+    /// <param name="recordAsViewed">
+    /// Whether this fetch represents a genuine "user looked at this user's details" event, e.g. the View
+    /// screen - as opposed to an internal lookup (Edit's form pre-fill, Edit's own re-fetch before saving,
+    /// Delete's confirmation screen). When true, a "Viewed" entry is recorded in the audit log.
+    /// </param>
     /// <returns></returns>
-    Task<User?> GetByIdAsync(long id);
+    Task<User?> GetByIdAsync(long id, bool recordAsViewed = false);
 
     /// <summary>
     /// Return a single user matching the given email, or null if none exists
