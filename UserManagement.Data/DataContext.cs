@@ -45,6 +45,7 @@ public class DataContext : DbContext, IDataContext
     }
 
     public DbSet<User>? Users { get; set; }
+    public DbSet<UserLog>? UserLogs { get; set; }
 
     public async Task<IEnumerable<TEntity>> GetAllAsync<TEntity>() where TEntity : class
         => await base.Set<TEntity>().ToListAsync();
