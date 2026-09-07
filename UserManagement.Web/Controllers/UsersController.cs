@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Threading.Tasks;
 using UserManagement.Services.Domain.Exceptions;
 using UserManagement.Services.Domain.Interfaces;
@@ -100,6 +101,13 @@ public class UsersController : Controller
 
         return RedirectToAction(nameof(List));
     }
+
+    [HttpGet("delete/{id:long}")]
+    public Task<IActionResult> Delete(long id) => throw new NotImplementedException();
+
+    [HttpDelete("delete/{id:long}")]
+    [ActionName(nameof(Delete))]
+    public Task<IActionResult> DeleteConfirmed(long id) => throw new NotImplementedException();
 
     private void SetFormViewData(string formAction, long? userId = null)
     {

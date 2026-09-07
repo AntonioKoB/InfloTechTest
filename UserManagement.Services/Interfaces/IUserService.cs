@@ -41,4 +41,11 @@ public interface IUserService
     /// <param name="user"></param>
     /// <returns></returns>
     Task UpdateAsync(User user);
+
+    /// <summary>
+    /// Delete an existing user matching the given ID
+    /// </summary>
+    /// <param name="id"></param>
+    /// <returns></returns>
+    Task DeleteAsync(long id);
 }
