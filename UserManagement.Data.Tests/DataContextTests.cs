@@ -203,5 +203,59 @@ public class DataContextTests
         result.Should().NotContain(s => s.Email == entity.Email);
     }
 
+    [Fact]
+    public async Task CreateAsync_WhenUserLogAdded_MustBeRetrievableByGetAllAsync()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var context = CreateContext();
+
+        var entity = new UserLog
+        {
+            UserId = 1,
+            Action = UserLogAction.Created,
+            Timestamp = new DateTime(2026, 9, 7, 12, 0, 0, DateTimeKind.Utc),
+            AfterJson = "{}"
+        };
+        await context.CreateAsync(entity);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await context.GetAllAsync<UserLog>();
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result
+            .Should().Contain(l => l.UserId == entity.UserId && l.Timestamp == entity.Timestamp)
+            .Which.Should().BeEquivalentTo(entity);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WhenUserDeleted_MustNotAffectUserLogRowsReferencingThatUserId()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // UserLog deliberately has no foreign-key/navigation relationship to User (see UserLog.cs) - an audit
+        // record needs to survive deletion of the user it refers to, otherwise deleting a user would destroy
+        // the very "user was deleted" log entry that matters most. This test proves that decision holds: the
+        // UserLog row must remain fully intact and retrievable after its referenced User is gone.
+        var context = CreateContext();
+        var user = (await context.GetAllAsync<User>()).First();
+
+        var log = new UserLog
+        {
+            UserId = user.Id,
+            Action = UserLogAction.Deleted,
+            Timestamp = new DateTime(2026, 9, 7, 12, 0, 0, DateTimeKind.Utc),
+            BeforeJson = "{}"
+        };
+        await context.CreateAsync(log);
+        await context.DeleteAsync(user);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await context.GetAllAsync<UserLog>();
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result
+            .Should().Contain(l => l.UserId == user.Id && l.Timestamp == log.Timestamp)
+            .Which.Should().BeEquivalentTo(log);
+    }
+
     private DataContext CreateContext() => new(Guid.NewGuid().ToString());
 }
