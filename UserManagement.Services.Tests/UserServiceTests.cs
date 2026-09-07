@@ -217,6 +217,37 @@ public class UserServiceTests
     }
 
     [Fact]
+    public async Task DeleteAsync_WhenCalled_MustPersistViaDataContext()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var service = CreateService();
+        var user = SetupUser(id: 5);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        await service.DeleteAsync(5);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        _dataContext.Verify(s => s.DeleteAsync(user), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WhenUserDoesNotExist_MustNotThrowAndMustNotCallDataContext()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var service = CreateService();
+        _dataContext
+            .Setup(s => s.GetByIdAsync<User>(It.IsAny<object>()))
+            .ReturnsAsync((User?)null);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var act = () => service.DeleteAsync(999);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        await act.Should().NotThrowAsync();
+        _dataContext.Verify(s => s.DeleteAsync(It.IsAny<User>()), Times.Never);
+    }
+
+    [Fact]
     public async Task GetByEmailAsync_WhenEmailDiffersOnlyByCase_PredicateMustStillMatch()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.

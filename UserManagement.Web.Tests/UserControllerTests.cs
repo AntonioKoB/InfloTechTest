@@ -305,6 +305,53 @@ public class UserControllerTests
         controller.ModelState[nameof(UserFormViewModel.Email)]!.Errors.Should().NotBeEmpty();
     }
 
+    [Fact]
+    public async Task Delete_WhenUserExists_MustReturnViewResultWithUser()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var controller = CreateController();
+        var user = SetupUser();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await controller.Delete(user.Id);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeOfType<ViewResult>()
+            .Which.Model.Should().BeOfType<UserViewModel>()
+            .Which.Should().BeEquivalentTo(user);
+    }
+
+    [Fact]
+    public async Task Delete_WhenUserDoesNotExist_MustReturnUserNotFoundView()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var controller = CreateController();
+        _userService
+            .Setup(s => s.GetByIdAsync(It.IsAny<long>()))
+            .ReturnsAsync((User?)null);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await controller.Delete(999);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeOfType<ViewResult>()
+            .Which.ViewName.Should().Be("UserNotFound");
+    }
+
+    [Fact]
+    public async Task DeleteConfirmed_MustDeleteUserAndReturnOk()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var controller = CreateController();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await controller.DeleteConfirmed(5);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        _userService.Verify(s => s.DeleteAsync(5), Times.Once);
+        result.Should().BeOfType<OkResult>();
+    }
+
     private User SetupUser(string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null)
     {
         var user = new User

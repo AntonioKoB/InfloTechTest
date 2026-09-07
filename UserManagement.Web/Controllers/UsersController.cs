@@ -101,6 +101,23 @@ public class UsersController : Controller
         return RedirectToAction(nameof(List));
     }
 
+    [HttpGet("delete/{id:long}")]
+    public async Task<IActionResult> Delete(long id)
+    {
+        var user = await _userService.GetByIdAsync(id);
+        if (user is null) return View("UserNotFound", id);
+
+        return View(user.ToViewModel());
+    }
+
+    [HttpDelete("delete/{id:long}")]
+    [ActionName(nameof(Delete))]
+    public async Task<IActionResult> DeleteConfirmed(long id)
+    {
+        await _userService.DeleteAsync(id);
+        return Ok();
+    }
+
     private void SetFormViewData(string formAction, long? userId = null)
     {
         var isEdit = formAction == nameof(Edit);
