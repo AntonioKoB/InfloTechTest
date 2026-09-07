@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace UserManagement.Web.Models.Users;
 
@@ -10,4 +11,5 @@ public class UserViewModel
     public string? Email { get; set; }
     public bool IsActive { get; set; }
     public DateOnly DateOfBirth { get; set; }
+    public IReadOnlyList<UserLogEntryViewModel> Logs { get; set; } = [];
 }

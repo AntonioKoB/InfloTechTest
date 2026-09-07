@@ -23,7 +23,8 @@ public class UserService : IUserService
 
     public Task<IEnumerable<User>> GetAllAsync() => _dataAccess.GetAllAsync<User>();
 
-    public Task<User?> GetByIdAsync(long id) => _dataAccess.GetByIdAsync<User>(id);
+    // recordAsViewed is meaningless here - only AuditingUserService acts on it.
+    public Task<User?> GetByIdAsync(long id, bool recordAsViewed = false) => _dataAccess.GetByIdAsync<User>(id);
 
     public Task<User?> GetByEmailAsync(string email)
         => _dataAccess.FirstOrDefaultAsync<User>(u => u.Email.ToLower() == email.ToLower());

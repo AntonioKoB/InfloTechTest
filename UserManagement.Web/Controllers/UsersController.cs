@@ -10,7 +10,12 @@ namespace UserManagement.WebMS.Controllers;
 public class UsersController : Controller
 {
     private readonly IUserService _userService;
-    public UsersController(IUserService userService) => _userService = userService;
+    private readonly IUserLogService _userLogService;
+    public UsersController(IUserService userService, IUserLogService userLogService)
+    {
+        _userService = userService;
+        _userLogService = userLogService;
+    }
 
     [HttpGet]
     public async Task<ViewResult> List(UserListFilter filter = UserListFilter.All)
@@ -33,10 +38,14 @@ public class UsersController : Controller
     [HttpGet("{id:long}")]
     public async Task<IActionResult> View(long id)
     {
-        var user = await _userService.GetByIdAsync(id);
+        var user = await _userService.GetByIdAsync(id, recordAsViewed: true);
         if (user is null) return View("UserNotFound", id);
 
-        return View(user.ToViewModel());
+        var logs = await _userLogService.GetForUserAsync(id);
+
+        var model = user.ToViewModel();
+        model.Logs = [.. logs.Select(l => new UserLogEntryViewModel { Action = l.Action, Timestamp = l.Timestamp })];
+        return View(model);
     }
 
     [HttpGet("add")]
