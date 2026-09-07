@@ -32,9 +32,24 @@ public class AuditingUserService : IUserService
     public Task<User?> GetByEmailAsync(string email) => _inner.GetByEmailAsync(email);
     public Task<User?> GetByIdAsync(long id) => _inner.GetByIdAsync(id);
 
-    public Task CreateAsync(User user) => throw new NotImplementedException();
+    public async Task CreateAsync(User user)
+    {
+        await _inner.CreateAsync(user);
+        await _userLogService.RecordAsync(user.Id, UserLogAction.Created, before: null, after: user);
+    }
 
-    public Task UpdateAsync(User user) => throw new NotImplementedException();
+    public async Task UpdateAsync(User user)
+    {
+        var before = await _dataAccess.FirstOrDefaultAsync<User>(u => u.Id == user.Id);
+        await _inner.UpdateAsync(user);
+        await _userLogService.RecordAsync(user.Id, UserLogAction.Updated, before, after: user);
+    }
 
-    public Task DeleteAsync(long id) => throw new NotImplementedException();
+    public async Task DeleteAsync(long id)
+    {
+        var before = await _dataAccess.FirstOrDefaultAsync<User>(u => u.Id == id);
+        await _inner.DeleteAsync(id);
+        if (before is not null)
+            await _userLogService.RecordAsync(id, UserLogAction.Deleted, before, after: null);
+    }
 }

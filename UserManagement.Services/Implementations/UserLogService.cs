@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using UserManagement.Data;
 using UserManagement.Models;
@@ -13,8 +15,17 @@ public class UserLogService : IUserLogService
     public UserLogService(IDataContext dataAccess) => _dataAccess = dataAccess;
 
     public Task RecordAsync(long userId, UserLogAction action, User? before, User? after)
-        => throw new NotImplementedException();
+        => _dataAccess.CreateAsync(new UserLog
+        {
+            UserId = userId,
+            Action = action,
+            Timestamp = DateTime.UtcNow,
+            BeforeJson = before is null ? null : JsonSerializer.Serialize(before),
+            AfterJson = after is null ? null : JsonSerializer.Serialize(after)
+        });
 
-    public Task<IEnumerable<UserLog>> GetForUserAsync(long userId)
-        => throw new NotImplementedException();
+    public async Task<IEnumerable<UserLog>> GetForUserAsync(long userId)
+        => (await _dataAccess.GetAllAsync<UserLog>())
+            .Where(l => l.UserId == userId)
+            .OrderByDescending(l => l.Timestamp);
 }

@@ -22,4 +22,12 @@
     <dd>@(Model.IsActive ? "Yes" : "No")</dd>
 </dl>
 
+<h3>Activity Log</h3>
+<ul>
+@foreach (var log in Model.Logs)
+{
+    <li>@log.Action &mdash; @log.Timestamp.ToString("dd MMM yyyy HH:mm")</li>
+}
+</ul>
+
 <a asp-controller="Users" asp-action="List" class="btn btn-default">Back to List</a>
