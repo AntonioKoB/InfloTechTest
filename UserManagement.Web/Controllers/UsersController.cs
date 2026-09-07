@@ -105,7 +105,9 @@ public class UsersController : Controller
     public async Task<IActionResult> Delete(long id)
     {
         var user = await _userService.GetByIdAsync(id);
-        return View(user!.ToViewModel());
+        if (user is null) return View("UserNotFound", id);
+
+        return View(user.ToViewModel());
     }
 
     [HttpDelete("delete/{id:long}")]

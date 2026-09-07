@@ -52,6 +52,9 @@ public class UserService : IUserService
     public async Task DeleteAsync(long id)
     {
         var user = await GetByIdAsync(id);
-        await _dataAccess.DeleteAsync(user!);
+        if (user is not null)
+        {
+            await _dataAccess.DeleteAsync(user);
+        }
     }
 }
