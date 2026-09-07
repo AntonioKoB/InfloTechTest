@@ -223,7 +223,7 @@ public class DataContextTests
 
         // Assert: Verifies that the action of the method under test behaves as expected.
         result
-            .Should().Contain(l => l.UserId == entity.UserId && l.Timestamp == entity.Timestamp)
+            .Should().Contain(l => l.Id == entity.Id)
             .Which.Should().BeEquivalentTo(entity);
     }
 
@@ -253,7 +253,7 @@ public class DataContextTests
 
         // Assert: Verifies that the action of the method under test behaves as expected.
         result
-            .Should().Contain(l => l.UserId == user.Id && l.Timestamp == log.Timestamp)
+            .Should().Contain(l => l.Id == log.Id)
             .Which.Should().BeEquivalentTo(log);
     }
 
