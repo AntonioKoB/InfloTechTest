@@ -52,7 +52,7 @@ public class DataContext : DbContext, IDataContext
             Id = u.Id,
             UserId = u.Id,
             Action = UserLogAction.Created,
-            Timestamp = DateTime.Now,
+            Timestamp = DateTime.UtcNow,
             AfterJson = JsonSerializer.Serialize(u)
         }));
     }

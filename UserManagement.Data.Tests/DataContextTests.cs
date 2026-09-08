@@ -267,7 +267,7 @@ public class DataContextTests
         var context = CreateContext();
 
         var logs = Enumerable.Range(1, 5)
-            .Select(i => new UserLog { UserId = 1, Action = UserLogAction.Created, Timestamp = DateTime.Now.AddDays(i) })
+            .Select(i => new UserLog { UserId = 1, Action = UserLogAction.Created, Timestamp = DateTime.UtcNow.AddDays(i) })
             .ToArray();
         foreach (var log in logs) await context.CreateAsync(log);
 
