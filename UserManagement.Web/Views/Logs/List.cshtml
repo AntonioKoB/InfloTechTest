@@ -1,0 +1,45 @@
+@model UserManagement.Web.Models.Logs.LogListViewModel
+
+<h2>Logs</h2>
+
+<div class="table-responsive">
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Action</th>
+                <th>Timestamp</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model.Items)
+            {
+                <tr>
+                    <td>
+                        <a asp-controller="Users" asp-action="View" asp-route-id="@item.UserId">@item.UserId</a>
+                    </td>
+                    <td>
+                        @item.Action
+                    </td>
+                    <td>
+                        @item.Timestamp.ToString("dd MMM yyyy HH:mm")
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<nav aria-label="Log pages">
+    <ul class="pagination">
+        <li class="page-item @(Model.Page <= 1 ? "disabled" : "")">
+            <a class="page-link" asp-controller="Logs" asp-action="List" asp-route-page="@(Model.Page - 1)">Previous</a>
+        </li>
+        <li class="page-item disabled">
+            <span class="page-link">Page @Model.Page of @Model.TotalPages</span>
+        </li>
+        <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")">
+            <a class="page-link" asp-controller="Logs" asp-action="List" asp-route-page="@(Model.Page + 1)">Next</a>
+        </li>
+    </ul>
+</nav>

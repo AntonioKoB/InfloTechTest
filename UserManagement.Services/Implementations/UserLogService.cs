@@ -30,6 +30,18 @@ public class UserLogService : IUserLogService
             .Where(l => l.UserId == userId)
             .OrderByDescending(l => l.Timestamp);
 
-    public Task<PagedResult<UserLog>> GetPagedAsync(int page, int pageSize)
-        => throw new NotImplementedException();
+    public async Task<PagedResult<UserLog>> GetPagedAsync(int page, int pageSize)
+    {
+        var logs = (await _dataAccess.GetAllAsync<UserLog>())
+            .OrderByDescending(l => l.Timestamp)
+            .ToList();
+
+        return new PagedResult<UserLog>
+        {
+            Items = logs.Skip((page - 1) * pageSize).Take(pageSize).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = logs.Count
+        };
+    }
 }
