@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using UserManagement.Models;
@@ -29,7 +30,7 @@ public class DataContext : DbContext, IDataContext
     {
         model.Entity<User>().HasIndex(u => u.Email).IsUnique();
 
-        model.Entity<User>().HasData(new[]
+        var users = new[]
         {
             new User { Id = 1, Forename = "Peter", Surname = "Loew", Email = "ploew@example.com", IsActive = true, DateOfBirth = new DateOnly(1955, 3, 22) },
             new User { Id = 2, Forename = "Benjamin Franklin", Surname = "Gates", Email = "bfgates@example.com", IsActive = true, DateOfBirth = new DateOnly(1968, 7, 15) },
@@ -42,7 +43,18 @@ public class DataContext : DbContext, IDataContext
             new User { Id = 9, Forename = "Damon", Surname = "Macready", Email = "dmacready@example.com", IsActive = false, DateOfBirth = new DateOnly(1960, 8, 14) },
             new User { Id = 10, Forename = "Johnny", Surname = "Blaze", Email = "jblaze@example.com", IsActive = true, DateOfBirth = new DateOnly(1980, 6, 21) },
             new User { Id = 11, Forename = "Robin", Surname = "Feld", Email = "rfeld@example.com", IsActive = true, DateOfBirth = new DateOnly(1963, 1, 9) },
-        });
+        };
+
+        model.Entity<User>().HasData(users);
+
+        model.Entity<UserLog>().HasData(users.Select(u => new UserLog
+        {
+            Id = u.Id,
+            UserId = u.Id,
+            Action = UserLogAction.Created,
+            Timestamp = DateTime.Now,
+            AfterJson = JsonSerializer.Serialize(u)
+        }));
     }
 
     public DbSet<User>? Users { get; set; }

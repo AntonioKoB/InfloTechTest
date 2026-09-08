@@ -31,4 +31,11 @@ public interface IUserLogService
     /// <param name="pageSize"></param>
     /// <returns></returns>
     Task<PagedResult<UserLog>> GetPagedAsync(int page, int pageSize);
+
+    /// <summary>
+    /// Return a single log entry matching the given ID, or null if none exists
+    /// </summary>
+    /// <param name="id"></param>
+    /// <returns></returns>
+    Task<UserLog?> GetByIdAsync(long id);
 }

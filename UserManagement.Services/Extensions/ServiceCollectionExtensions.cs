@@ -10,6 +10,7 @@ public static class ServiceCollectionExtensions
         => services
             .AddScoped<UserService>()
             .AddScoped<IUserLogService, UserLogService>()
+            .AddScoped<IUserLogDiffBuilder, UserLogDiffBuilder>()
             .AddScoped<IUserService>(sp => new AuditingUserService(
                 sp.GetRequiredService<UserService>(),
                 sp.GetRequiredService<IUserLogService>(),

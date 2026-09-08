@@ -163,6 +163,35 @@ public class UserLogServiceTests
         result.TotalCount.Should().Be(1);
     }
 
+    [Fact]
+    public async Task GetByIdAsync_WhenContextReturnsLog_MustReturnSameLog()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var service = CreateService();
+        var log = new UserLog { Id = 5, UserId = 1, Action = UserLogAction.Created, Timestamp = DateTime.UtcNow };
+        _dataContext.Setup(s => s.GetByIdAsync<UserLog>(5L)).ReturnsAsync(log);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await service.GetByIdAsync(5);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeSameAs(log);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_WhenContextReturnsNull_MustReturnNull()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var service = CreateService();
+        _dataContext.Setup(s => s.GetByIdAsync<UserLog>(It.IsAny<object>())).ReturnsAsync((UserLog?)null);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await service.GetByIdAsync(999);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeNull();
+    }
+
     private readonly Mock<IDataContext> _dataContext = new();
     private UserLogService CreateService() => new(_dataContext.Object);
 }

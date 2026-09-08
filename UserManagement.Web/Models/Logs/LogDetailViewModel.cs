@@ -3,10 +3,10 @@ using UserManagement.Models;
 
 namespace UserManagement.Web.Models.Logs;
 
-public class LogListItemViewModel
+public class LogDetailViewModel
 {
-    public long Id { get; set; }
     public long UserId { get; set; }
     public UserLogAction Action { get; set; }
     public DateTime Timestamp { get; set; }
+    public List<LogFieldChangeViewModel> Changes { get; set; } = [];
 }

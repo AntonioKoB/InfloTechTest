@@ -26,7 +26,7 @@
 <ul>
 @foreach (var log in Model.Logs)
 {
-    <li>@log.Action &mdash; @log.Timestamp.ToString("dd MMM yyyy HH:mm")</li>
+    <li><a asp-controller="Logs" asp-action="View" asp-route-id="@log.Id">@log.Action &mdash; @log.Timestamp.ToString("dd MMM yyyy HH:mm")</a></li>
 }
 </ul>
 
