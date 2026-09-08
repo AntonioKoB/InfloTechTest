@@ -2,6 +2,7 @@
 using System.Threading.Tasks;
 using UserManagement.Services.Domain.Exceptions;
 using UserManagement.Services.Domain.Interfaces;
+using UserManagement.Web.Models.Logs;
 using UserManagement.Web.Models.Users;
 
 namespace UserManagement.WebMS.Controllers;
@@ -44,7 +45,7 @@ public class UsersController : Controller
         var logs = await _userLogService.GetForUserAsync(id);
 
         var model = user.ToViewModel();
-        model.Logs = [.. logs.Select(l => new UserLogEntryViewModel { Action = l.Action, Timestamp = l.Timestamp })];
+        model.Logs = [.. logs.Select(l => l.ToEntryViewModel())];
         return View(model);
     }
 

@@ -257,5 +257,42 @@ public class DataContextTests
             .Which.Should().BeEquivalentTo(log);
     }
 
+    [Fact]
+    public async Task GetPageAsync_WhenCalled_MustReturnOrderedSkipTakeSliceWithoutLoadingWholeTable()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // This is the fix for pushing pagination down to the query provider instead of materializing the
+        // whole table via GetAllAsync and paging in memory - asserting against a real DataContext (not a
+        // mock) is what actually proves Skip/Take/OrderBy compose correctly against EF Core.
+        var context = CreateContext();
+        var logs = Enumerable.Range(1, 5)
+            .Select(i => new UserLog { UserId = 1, Action = UserLogAction.Created, Timestamp = new DateTime(2026, 9, i, 12, 0, 0, DateTimeKind.Utc) })
+            .ToArray();
+        foreach (var log in logs) await context.CreateAsync(log);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await context.GetPageAsync<UserLog, DateTime>(l => l.Timestamp, descending: true, skip: 1, take: 2);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        // BeEquivalentTo (not ContainInOrder) since GetPageAsync uses AsNoTracking and so returns freshly
+        // materialized instances - not reference-equal to the logs[] array, which ContainInOrder would need.
+        result.Should().BeEquivalentTo([logs[3], logs[2]], options => options.WithStrictOrdering());
+    }
+
+    [Fact]
+    public async Task CountAsync_WhenCalled_MustReturnTotalCountOfThatEntityType()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var context = CreateContext();
+        await context.CreateAsync(new UserLog { UserId = 1, Action = UserLogAction.Created, Timestamp = DateTime.UtcNow });
+        await context.CreateAsync(new UserLog { UserId = 1, Action = UserLogAction.Updated, Timestamp = DateTime.UtcNow });
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await context.CountAsync<UserLog>();
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().Be(2);
+    }
+
     private DataContext CreateContext() => new(Guid.NewGuid().ToString());
 }

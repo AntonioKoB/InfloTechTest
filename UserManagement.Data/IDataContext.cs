@@ -31,6 +31,25 @@ public interface IDataContext
     Task<TEntity?> FirstOrDefaultAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class;
 
     /// <summary>
+    /// Get a page of items, ordered by the given key, without loading the rest of the table into memory
+    /// </summary>
+    /// <typeparam name="TEntity"></typeparam>
+    /// <typeparam name="TKey"></typeparam>
+    /// <param name="orderBy"></param>
+    /// <param name="descending"></param>
+    /// <param name="skip"></param>
+    /// <param name="take"></param>
+    /// <returns></returns>
+    Task<IReadOnlyList<TEntity>> GetPageAsync<TEntity, TKey>(Expression<Func<TEntity, TKey>> orderBy, bool descending, int skip, int take) where TEntity : class;
+
+    /// <summary>
+    /// Count all items of the given type
+    /// </summary>
+    /// <typeparam name="TEntity"></typeparam>
+    /// <returns></returns>
+    Task<int> CountAsync<TEntity>() where TEntity : class;
+
+    /// <summary>
     /// Create a new item
     /// </summary>
     /// <typeparam name="TEntity"></typeparam>

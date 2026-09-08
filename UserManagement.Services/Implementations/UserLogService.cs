@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using UserManagement.Data;
 using UserManagement.Models;
+using UserManagement.Services.Domain;
 using UserManagement.Services.Domain.Interfaces;
 
 namespace UserManagement.Services.Domain.Implementations;
@@ -28,4 +29,18 @@ public class UserLogService : IUserLogService
         => (await _dataAccess.GetAllAsync<UserLog>())
             .Where(l => l.UserId == userId)
             .OrderByDescending(l => l.Timestamp);
+
+    public async Task<PagedResult<UserLog>> GetPagedAsync(int page, int pageSize)
+    {
+        var items = await _dataAccess.GetPageAsync<UserLog, DateTime>(l => l.Timestamp, descending: true, skip: (page - 1) * pageSize, take: pageSize);
+        var totalCount = await _dataAccess.CountAsync<UserLog>();
+
+        return new PagedResult<UserLog>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        };
+    }
 }
