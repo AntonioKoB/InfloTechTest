@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -55,6 +56,16 @@ public class DataContext : DbContext, IDataContext
 
     public async Task<TEntity?> FirstOrDefaultAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class
         => await base.Set<TEntity>().AsNoTracking().FirstOrDefaultAsync(predicate);
+
+    public async Task<IReadOnlyList<TEntity>> GetPageAsync<TEntity, TKey>(Expression<Func<TEntity, TKey>> orderBy, bool descending, int skip, int take) where TEntity : class
+    {
+        var query = base.Set<TEntity>().AsNoTracking();
+        query = descending ? query.OrderByDescending(orderBy) : query.OrderBy(orderBy);
+        return await query.Skip(skip).Take(take).ToListAsync();
+    }
+
+    public Task<int> CountAsync<TEntity>() where TEntity : class
+        => base.Set<TEntity>().CountAsync();
 
     public Task CreateAsync<TEntity>(TEntity entity) where TEntity : class
         => PersistAsync(() => base.Add(entity));

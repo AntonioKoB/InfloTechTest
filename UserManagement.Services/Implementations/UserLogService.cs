@@ -32,16 +32,15 @@ public class UserLogService : IUserLogService
 
     public async Task<PagedResult<UserLog>> GetPagedAsync(int page, int pageSize)
     {
-        var logs = (await _dataAccess.GetAllAsync<UserLog>())
-            .OrderByDescending(l => l.Timestamp)
-            .ToList();
+        var items = await _dataAccess.GetPageAsync<UserLog, DateTime>(l => l.Timestamp, descending: true, skip: (page - 1) * pageSize, take: pageSize);
+        var totalCount = await _dataAccess.CountAsync<UserLog>();
 
         return new PagedResult<UserLog>
         {
-            Items = logs.Skip((page - 1) * pageSize).Take(pageSize).ToList(),
+            Items = items,
             Page = page,
             PageSize = pageSize,
-            TotalCount = logs.Count
+            TotalCount = totalCount
         };
     }
 }

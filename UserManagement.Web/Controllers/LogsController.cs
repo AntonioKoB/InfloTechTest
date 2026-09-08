@@ -8,7 +8,7 @@ namespace UserManagement.WebMS.Controllers;
 [Route("logs")]
 public class LogsController : Controller
 {
-    private const int PageSize = 20;
+    private const int PageSize = 10;
 
     private readonly IUserLogService _userLogService;
     public LogsController(IUserLogService userLogService) => _userLogService = userLogService;
@@ -20,12 +20,7 @@ public class LogsController : Controller
 
         var model = new LogListViewModel
         {
-            Items = [.. result.Items.Select(l => new LogListItemViewModel
-            {
-                UserId = l.UserId,
-                Action = l.Action,
-                Timestamp = l.Timestamp
-            })],
+            Items = [.. result.Items.Select(l => l.ToListItemViewModel())],
             Page = result.Page,
             TotalPages = result.TotalPages
         };
