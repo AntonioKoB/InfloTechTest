@@ -1,4 +1,3 @@
-using System;
 using System.Linq;
 using System.Threading.Tasks;
 using UserManagement.Services.Domain.Interfaces;
@@ -35,5 +34,16 @@ public class LogsController : Controller
     }
 
     [HttpGet("{id:long}")]
-    public Task<IActionResult> View(long id) => throw new NotImplementedException();
+    public async Task<IActionResult> View(long id)
+    {
+        var log = await _userLogService.GetByIdAsync(id);
+
+        return View(new LogDetailViewModel
+        {
+            UserId = log!.UserId,
+            Action = log.Action,
+            Timestamp = log.Timestamp,
+            Changes = [.. _diffBuilder.Build(log).Select(c => c.ToViewModel())]
+        });
+    }
 }

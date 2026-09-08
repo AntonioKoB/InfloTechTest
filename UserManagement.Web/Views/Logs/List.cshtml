@@ -19,7 +19,7 @@
                         <a asp-controller="Users" asp-action="View" asp-route-id="@item.UserId">@item.UserId</a>
                     </td>
                     <td>
-                        @item.Action
+                        <a asp-controller="Logs" asp-action="View" asp-route-id="@item.Id">@item.Action</a>
                     </td>
                     <td>
                         @item.Timestamp.ToString("dd MMM yyyy HH:mm")
