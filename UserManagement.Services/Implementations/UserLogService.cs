@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using UserManagement.Data;
 using UserManagement.Models;
+using UserManagement.Services.Domain;
 using UserManagement.Services.Domain.Interfaces;
 
 namespace UserManagement.Services.Domain.Implementations;
@@ -28,4 +29,7 @@ public class UserLogService : IUserLogService
         => (await _dataAccess.GetAllAsync<UserLog>())
             .Where(l => l.UserId == userId)
             .OrderByDescending(l => l.Timestamp);
+
+    public Task<PagedResult<UserLog>> GetPagedAsync(int page, int pageSize)
+        => throw new NotImplementedException();
 }

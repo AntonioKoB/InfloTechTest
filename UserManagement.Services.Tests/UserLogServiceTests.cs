@@ -97,6 +97,61 @@ public class UserLogServiceTests
         result.Should().NotContain(otherUsersLog);
     }
 
+    [Fact]
+    public async Task GetPagedAsync_WhenMoreRowsThanOnePage_MustReturnRequestedPageNewestFirst()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var service = CreateService();
+        var logs = Enumerable.Range(1, 5)
+            .Select(i => new UserLog { Id = i, UserId = 1, Action = UserLogAction.Created, Timestamp = new DateTime(2026, 9, i, 12, 0, 0, DateTimeKind.Utc) })
+            .ToArray();
+        _dataContext.Setup(s => s.GetAllAsync<UserLog>()).ReturnsAsync(logs);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await service.GetPagedAsync(page: 1, pageSize: 2);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Items.Should().ContainInOrder(logs[4], logs[3]);
+        result.Items.Should().HaveCount(2);
+        result.Page.Should().Be(1);
+        result.PageSize.Should().Be(2);
+        result.TotalCount.Should().Be(5);
+        result.TotalPages.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task GetPagedAsync_WhenRequestingSecondPage_MustSkipTheFirstPagesRows()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var service = CreateService();
+        var logs = Enumerable.Range(1, 5)
+            .Select(i => new UserLog { Id = i, UserId = 1, Action = UserLogAction.Created, Timestamp = new DateTime(2026, 9, i, 12, 0, 0, DateTimeKind.Utc) })
+            .ToArray();
+        _dataContext.Setup(s => s.GetAllAsync<UserLog>()).ReturnsAsync(logs);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await service.GetPagedAsync(page: 2, pageSize: 2);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Items.Should().ContainInOrder(logs[2], logs[1]);
+    }
+
+    [Fact]
+    public async Task GetPagedAsync_WhenPageIsPastTheEnd_MustReturnEmptyItemsWithTotalCountStillPopulated()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var service = CreateService();
+        var logs = new[] { new UserLog { Id = 1, UserId = 1, Action = UserLogAction.Created, Timestamp = DateTime.UtcNow } };
+        _dataContext.Setup(s => s.GetAllAsync<UserLog>()).ReturnsAsync(logs);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await service.GetPagedAsync(page: 99, pageSize: 20);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Items.Should().BeEmpty();
+        result.TotalCount.Should().Be(1);
+    }
+
     private readonly Mock<IDataContext> _dataContext = new();
     private UserLogService CreateService() => new(_dataContext.Object);
 }
