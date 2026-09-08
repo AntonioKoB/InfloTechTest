@@ -36,12 +36,19 @@ public class DataContext : DbContext, IDataContext
 
         model.Entity<User>().HasData(users);
 
+        // Fixed, deterministic value - not DateTime.UtcNow. HasData seed values are part of the model itself,
+        // so a value that changes on every model build makes EF's migrations validation (correctly) treat
+        // every startup as "the model has pending changes", which forces disabling that check entirely -
+        // losing the safety net that catches a genuinely forgotten migration. A static value keeps that
+        // check meaningful.
+        var seedTimestamp = new DateTime(2026, 9, 7, 12, 0, 0, DateTimeKind.Utc);
+
         model.Entity<UserLog>().HasData(users.Select(u => new UserLog
         {
             Id = u.Id,
             UserId = u.Id,
             Action = UserLogAction.Created,
-            Timestamp = DateTime.UtcNow,
+            Timestamp = seedTimestamp,
             AfterJson = JsonSerializer.Serialize(u)
         }));
     }

@@ -12,7 +12,7 @@ using UserManagement.Data;
 namespace UserManagement.Data.Migrations
 {
     [DbContext(typeof(DataContext))]
-    [Migration("20260908151416_InitialCreate")]
+    [Migration("20260908163010_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -193,7 +193,7 @@ namespace UserManagement.Data.Migrations
                             Id = 1L,
                             Action = 0,
                             AfterJson = "{\"Id\":1,\"Forename\":\"Peter\",\"Surname\":\"Loew\",\"Email\":\"ploew@example.com\",\"IsActive\":true,\"DateOfBirth\":\"1955-03-22\"}",
-                            Timestamp = new DateTime(2026, 9, 8, 15, 14, 15, 66, DateTimeKind.Utc).AddTicks(3871),
+                            Timestamp = new DateTime(2026, 9, 7, 12, 0, 0, 0, DateTimeKind.Utc),
                             UserId = 1L
                         },
                         new
@@ -201,7 +201,7 @@ namespace UserManagement.Data.Migrations
                             Id = 2L,
                             Action = 0,
                             AfterJson = "{\"Id\":2,\"Forename\":\"Benjamin Franklin\",\"Surname\":\"Gates\",\"Email\":\"bfgates@example.com\",\"IsActive\":true,\"DateOfBirth\":\"1968-07-15\"}",
-                            Timestamp = new DateTime(2026, 9, 8, 15, 14, 15, 84, DateTimeKind.Utc).AddTicks(6984),
+                            Timestamp = new DateTime(2026, 9, 7, 12, 0, 0, 0, DateTimeKind.Utc),
                             UserId = 2L
                         },
                         new
@@ -209,7 +209,7 @@ namespace UserManagement.Data.Migrations
                             Id = 3L,
                             Action = 0,
                             AfterJson = "{\"Id\":3,\"Forename\":\"Castor\",\"Surname\":\"Troy\",\"Email\":\"ctroy@example.com\",\"IsActive\":false,\"DateOfBirth\":\"1970-11-02\"}",
-                            Timestamp = new DateTime(2026, 9, 8, 15, 14, 15, 84, DateTimeKind.Utc).AddTicks(7504),
+                            Timestamp = new DateTime(2026, 9, 7, 12, 0, 0, 0, DateTimeKind.Utc),
                             UserId = 3L
                         },
                         new
@@ -217,7 +217,7 @@ namespace UserManagement.Data.Migrations
                             Id = 4L,
                             Action = 0,
                             AfterJson = "{\"Id\":4,\"Forename\":\"Memphis\",\"Surname\":\"Raines\",\"Email\":\"mraines@example.com\",\"IsActive\":true,\"DateOfBirth\":\"1965-05-30\"}",
-                            Timestamp = new DateTime(2026, 9, 8, 15, 14, 15, 84, DateTimeKind.Utc).AddTicks(7544),
+                            Timestamp = new DateTime(2026, 9, 7, 12, 0, 0, 0, DateTimeKind.Utc),
                             UserId = 4L
                         },
                         new
@@ -225,7 +225,7 @@ namespace UserManagement.Data.Migrations
                             Id = 5L,
                             Action = 0,
                             AfterJson = "{\"Id\":5,\"Forename\":\"Stanley\",\"Surname\":\"Goodspeed\",\"Email\":\"sgodspeed@example.com\",\"IsActive\":true,\"DateOfBirth\":\"1972-09-18\"}",
-                            Timestamp = new DateTime(2026, 9, 8, 15, 14, 15, 84, DateTimeKind.Utc).AddTicks(7560),
+                            Timestamp = new DateTime(2026, 9, 7, 12, 0, 0, 0, DateTimeKind.Utc),
                             UserId = 5L
                         },
                         new
@@ -233,7 +233,7 @@ namespace UserManagement.Data.Migrations
                             Id = 6L,
                             Action = 0,
                             AfterJson = "{\"Id\":6,\"Forename\":\"H.I.\",\"Surname\":\"McDunnough\",\"Email\":\"himcdunnough@example.com\",\"IsActive\":true,\"DateOfBirth\":\"1958-02-10\"}",
-                            Timestamp = new DateTime(2026, 9, 8, 15, 14, 15, 84, DateTimeKind.Utc).AddTicks(7622),
+                            Timestamp = new DateTime(2026, 9, 7, 12, 0, 0, 0, DateTimeKind.Utc),
                             UserId = 6L
                         },
                         new
@@ -241,7 +241,7 @@ namespace UserManagement.Data.Migrations
                             Id = 7L,
                             Action = 0,
                             AfterJson = "{\"Id\":7,\"Forename\":\"Cameron\",\"Surname\":\"Poe\",\"Email\":\"cpoe@example.com\",\"IsActive\":false,\"DateOfBirth\":\"1975-04-05\"}",
-                            Timestamp = new DateTime(2026, 9, 8, 15, 14, 15, 84, DateTimeKind.Utc).AddTicks(7637),
+                            Timestamp = new DateTime(2026, 9, 7, 12, 0, 0, 0, DateTimeKind.Utc),
                             UserId = 7L
                         },
                         new
@@ -249,7 +249,7 @@ namespace UserManagement.Data.Migrations
                             Id = 8L,
                             Action = 0,
                             AfterJson = "{\"Id\":8,\"Forename\":\"Edward\",\"Surname\":\"Malus\",\"Email\":\"emalus@example.com\",\"IsActive\":false,\"DateOfBirth\":\"1969-12-25\"}",
-                            Timestamp = new DateTime(2026, 9, 8, 15, 14, 15, 84, DateTimeKind.Utc).AddTicks(7647),
+                            Timestamp = new DateTime(2026, 9, 7, 12, 0, 0, 0, DateTimeKind.Utc),
                             UserId = 8L
                         },
                         new
@@ -257,7 +257,7 @@ namespace UserManagement.Data.Migrations
                             Id = 9L,
                             Action = 0,
                             AfterJson = "{\"Id\":9,\"Forename\":\"Damon\",\"Surname\":\"Macready\",\"Email\":\"dmacready@example.com\",\"IsActive\":false,\"DateOfBirth\":\"1960-08-14\"}",
-                            Timestamp = new DateTime(2026, 9, 8, 15, 14, 15, 84, DateTimeKind.Utc).AddTicks(7658),
+                            Timestamp = new DateTime(2026, 9, 7, 12, 0, 0, 0, DateTimeKind.Utc),
                             UserId = 9L
                         },
                         new
@@ -265,7 +265,7 @@ namespace UserManagement.Data.Migrations
                             Id = 10L,
                             Action = 0,
                             AfterJson = "{\"Id\":10,\"Forename\":\"Johnny\",\"Surname\":\"Blaze\",\"Email\":\"jblaze@example.com\",\"IsActive\":true,\"DateOfBirth\":\"1980-06-21\"}",
-                            Timestamp = new DateTime(2026, 9, 8, 15, 14, 15, 84, DateTimeKind.Utc).AddTicks(7676),
+                            Timestamp = new DateTime(2026, 9, 7, 12, 0, 0, 0, DateTimeKind.Utc),
                             UserId = 10L
                         },
                         new
@@ -273,7 +273,7 @@ namespace UserManagement.Data.Migrations
                             Id = 11L,
                             Action = 0,
                             AfterJson = "{\"Id\":11,\"Forename\":\"Robin\",\"Surname\":\"Feld\",\"Email\":\"rfeld@example.com\",\"IsActive\":true,\"DateOfBirth\":\"1963-01-09\"}",
-                            Timestamp = new DateTime(2026, 9, 8, 15, 14, 15, 84, DateTimeKind.Utc).AddTicks(7687),
+                            Timestamp = new DateTime(2026, 9, 7, 12, 0, 0, 0, DateTimeKind.Utc),
                             UserId = 11L
                         });
                 });
