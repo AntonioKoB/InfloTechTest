@@ -43,4 +43,6 @@ public class UserLogService : IUserLogService
             TotalCount = totalCount
         };
     }
+
+    public Task<UserLog?> GetByIdAsync(long id) => _dataAccess.GetByIdAsync<UserLog>(id);
 }

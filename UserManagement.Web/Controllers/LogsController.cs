@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using UserManagement.Services.Domain.Interfaces;
@@ -11,7 +12,12 @@ public class LogsController : Controller
     private const int PageSize = 10;
 
     private readonly IUserLogService _userLogService;
-    public LogsController(IUserLogService userLogService) => _userLogService = userLogService;
+    private readonly IUserLogDiffBuilder _diffBuilder;
+    public LogsController(IUserLogService userLogService, IUserLogDiffBuilder diffBuilder)
+    {
+        _userLogService = userLogService;
+        _diffBuilder = diffBuilder;
+    }
 
     [HttpGet]
     public async Task<ViewResult> List(int page = 1)
@@ -27,4 +33,7 @@ public class LogsController : Controller
 
         return View(model);
     }
+
+    [HttpGet("{id:long}")]
+    public Task<IActionResult> View(long id) => throw new NotImplementedException();
 }

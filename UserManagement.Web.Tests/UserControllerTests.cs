@@ -99,7 +99,7 @@ public class UserControllerTests
             .Which.Model.Should().BeOfType<UserViewModel>()
             .Which.Logs.Should().BeEquivalentTo(new[]
             {
-                new UserLogEntryViewModel { Action = UserLogAction.Created, Timestamp = logs[0].Timestamp }
+                new UserLogEntryViewModel { Id = 1, Action = UserLogAction.Created, Timestamp = logs[0].Timestamp }
             });
     }
 
