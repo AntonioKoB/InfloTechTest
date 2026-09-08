@@ -3,7 +3,7 @@
 The exercise is an ASP.NET Core web application backed by Entity Framework Core, which faciliates management of some fictional users.
 We recommend that you use [Visual Studio (Community Edition)](https://visualstudio.microsoft.com/downloads) or [Visual Studio Code](https://code.visualstudio.com/Download) to run and modify the application. 
 
-**The application uses an in-memory database, so changes will not be persisted between executions.**
+**The application uses SQL Server via Entity Framework Core migrations. See the [Documentation](#documentation) section below for how to set up a database to run it against.**
 
 ## The Exercise
 Complete as many of the tasks below as you feel comfortable with. These are split into 4 levels of difficulty 
@@ -63,3 +63,55 @@ Add additional layers to the application that will ensure that it is scaleable w
 
 * Please feel free to change or refactor any code that has been supplied within the solution and think about clean maintainable code and architecture when extending the project.
 * If any additional packages, tools or setup are required to run your completed version, please document these thoroughly.
+
+# Documentation
+
+## Database
+
+The application uses SQL Server (via `Microsoft.EntityFrameworkCore.SqlServer`) and EF Core migrations, instead of the original in-memory provider. The schema and seed data are defined by the migrations checked into `UserManagement.Data/Migrations`, and are applied automatically on startup - you just need a database to point at and a connection string, no manual `dotnet ef` commands required to run the app.
+
+### 1. Prerequisite: a SQL Server instance
+
+Any edition works - a full local SQL Server install, SQL Server Express, or LocalDB. This was developed and verified against a local named instance.
+
+### 2. Create the login, user and database
+
+The application connects with SQL Server authentication, so a login/user needs to exist before the app can create the database. `Database.Migrate()` (run automatically on startup) creates the database and schema itself, but the server-level login/user is a one-time setup step outside EF's remit. Run the following against your instance (e.g. via SQL Server Management Studio or `sqlcmd`), adjusting the password:
+
+```sql
+CREATE LOGIN InfloDBUser WITH PASSWORD = 'Your-Strong-Password-Here';
+GO
+CREATE DATABASE InfloUsersDB;
+GO
+USE InfloUsersDB;
+CREATE USER InfloDBUser FOR LOGIN InfloDBUser;
+ALTER ROLE db_owner ADD MEMBER InfloDBUser;
+GO
+```
+
+### 3. Configure the connection string (local development)
+
+The connection string is never committed to source control. Locally, it's configured via [.NET User Secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), which stores it outside the repository entirely (`%APPDATA%\Microsoft\UserSecrets` on Windows), so there's no risk of accidentally committing real credentials. From `UserManagement.Web`:
+
+```bash
+dotnet user-secrets init
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=YOUR_SERVER;Database=InfloUsersDB;User Id=InfloDBUser;Password=YOUR_PASSWORD;TrustServerCertificate=True;"
+```
+
+Replace `YOUR_SERVER` with your instance (e.g. `localhost`, `localhost\SQLEXPRESS`, or `(localdb)\MSSQLLocalDB`) and `YOUR_PASSWORD` with the password chosen in step 2. `TrustServerCertificate=True` avoids a TLS-certificate error against a local instance that isn't using a trusted certificate.
+
+Once set, just run the app (`dotnet run` from `UserManagement.Web`, or via your IDE) - it applies any pending migrations automatically on startup and seeds the same 11 users the in-memory version used to.
+
+### 4. Adding future migrations
+
+If the `User`/`UserLog` model changes, generate a new migration from the repository root:
+
+```bash
+dotnet ef migrations add <MigrationName> --project UserManagement.Data --startup-project UserManagement.Web
+```
+
+Commit the generated files under `UserManagement.Data/Migrations` - they're applied automatically the next time the app starts, no separate `database update` step needed.
+
+### 5. Production (Azure)
+
+Azure SQL is the intended production target - it's the same `Microsoft.EntityFrameworkCore.SqlServer` provider, so only the connection string changes, not the code. .NET User Secrets is a local-development-only mechanism (it's only loaded when `ASPNETCORE_ENVIRONMENT=Development`), so it plays no role in production. In Azure App Service, the equivalent is setting the connection string as an App Service Configuration value - this surfaces to the app as an environment variable, which ASP.NET Core's configuration system already reads automatically, so no code change is required. For stronger secret management (centralized rotation, RBAC-audited access) Azure Key Vault with a Managed Identity is a natural next step once a real deployment pipeline exists to attach it to.

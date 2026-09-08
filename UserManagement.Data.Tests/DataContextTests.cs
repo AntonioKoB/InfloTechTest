@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using UserManagement.Models;
 
 namespace UserManagement.Data.Tests;
@@ -129,7 +130,10 @@ public class DataContextTests
         // real relational provider, which would reject this at SaveChanges with a unique-constraint
         // violation). Uniqueness is therefore solely UserService's responsibility for as long as this app
         // runs on InMemory - this test documents that explicitly rather than leaving it as a silent gap.
-        // Revisit once point 5 swaps in a real database, where the index will actually be enforced.
+        // This is a permanent, intentional divergence from production, not a stale TODO: these tests stay
+        // on the InMemory provider by design (fast, isolated, no external dependency), even after the real
+        // app switched to SQL Server, where the index genuinely is enforced - proven separately by manual
+        // verification against the real database, not by this suite.
         var context = CreateContext();
         var existing = (await context.GetAllAsync<User>()).First();
 
@@ -298,5 +302,16 @@ public class DataContextTests
         result.Should().Be(before + 2);
     }
 
-    private DataContext CreateContext() => new(Guid.NewGuid().ToString());
+    private DataContext CreateContext()
+    {
+        var context = new DataContext(
+            new DbContextOptionsBuilder<DataContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+
+        // The InMemory provider only applies OnModelCreating's HasData seed rows once the database is
+        // actually created - unlike the real SQL Server app, which gets its schema/seed data from
+        // Database.Migrate() at startup, these isolated per-test InMemory databases need EnsureCreated()
+        // for the same effect (Migrate() doesn't apply to a provider with no migration history).
+        context.Database.EnsureCreated();
+        return context;
+    }
 }
