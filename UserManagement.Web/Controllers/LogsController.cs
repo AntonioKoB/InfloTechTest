@@ -37,10 +37,11 @@ public class LogsController : Controller
     public async Task<IActionResult> View(long id)
     {
         var log = await _userLogService.GetByIdAsync(id);
+        if (log is null) return View("LogNotFound", id);
 
         return View(new LogDetailViewModel
         {
-            UserId = log!.UserId,
+            UserId = log.UserId,
             Action = log.Action,
             Timestamp = log.Timestamp,
             Changes = [.. _diffBuilder.Build(log).Select(c => c.ToViewModel())]

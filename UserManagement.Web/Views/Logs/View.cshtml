@@ -14,26 +14,33 @@
 </dl>
 
 <h3>Changes</h3>
-<div class="table-responsive">
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>Field</th>
-                <th>Old Value</th>
-                <th>New Value</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var change in Model.Changes)
-            {
+@if (Model.Changes.Count == 0)
+{
+    <p>No changes recorded for this action.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
                 <tr>
-                    <td>@change.PropertyName</td>
-                    <td>@(change.OldValue ?? "—")</td>
-                    <td>@(change.NewValue ?? "—")</td>
+                    <th>Field</th>
+                    <th>Old Value</th>
+                    <th>New Value</th>
                 </tr>
-            }
-        </tbody>
-    </table>
-</div>
+            </thead>
+            <tbody>
+                @foreach (var change in Model.Changes)
+                {
+                    <tr>
+                        <td>@change.PropertyName</td>
+                        <td>@(change.OldValue ?? "—")</td>
+                        <td>@(change.NewValue ?? "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
 
 <a asp-controller="Logs" asp-action="List" class="btn btn-default">Back to Logs</a>

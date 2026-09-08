@@ -83,5 +83,23 @@ public class UserLogDiffBuilderTests
         result.Should().NotContain(c => c.PropertyName == nameof(User.Id));
     }
 
+    [Fact]
+    public void Build_WhenActionIsViewed_MustReturnNoChanges()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Viewed stores an After snapshot (for display on the View screen) even though nothing changed -
+        // without this, the generic Before-is-null rule would show it as a full "nothing -> everything" diff,
+        // identical to Created's shape, which is misleading since a view isn't a change.
+        var builder = CreateBuilder();
+        var after = new User { Id = 1, Forename = "Existing", Surname = "User", Email = "existing@example.com", IsActive = true, DateOfBirth = new DateOnly(1990, 1, 1) };
+        var log = new UserLog { UserId = 1, Action = UserLogAction.Viewed, Timestamp = DateTime.UtcNow, BeforeJson = null, AfterJson = JsonSerializer.Serialize(after) };
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = builder.Build(log);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeEmpty();
+    }
+
     private static UserLogDiffBuilder CreateBuilder() => new();
 }

@@ -90,6 +90,21 @@ public class LogsControllerTests
             });
     }
 
+    [Fact]
+    public async Task View_WhenLogDoesNotExist_MustReturnLogNotFoundView()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var controller = CreateController();
+        _userLogService.Setup(s => s.GetByIdAsync(It.IsAny<long>())).ReturnsAsync((UserLog?)null);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await controller.View(999);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeOfType<ViewResult>()
+            .Which.ViewName.Should().Be("LogNotFound");
+    }
+
     private void SetupPagedResult(int page, int pageSize)
         => _userLogService
             .Setup(s => s.GetPagedAsync(page, pageSize))

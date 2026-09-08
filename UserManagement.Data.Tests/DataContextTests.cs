@@ -283,7 +283,10 @@ public class DataContextTests
     public async Task CountAsync_WhenCalled_MustReturnTotalCountOfThatEntityType()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Relative to the seeded baseline (each seeded User now has a matching "Created" UserLog - see
+        // OnModelCreating) rather than an absolute count, so this doesn't break if the seed data changes.
         var context = CreateContext();
+        var before = await context.CountAsync<UserLog>();
         await context.CreateAsync(new UserLog { UserId = 1, Action = UserLogAction.Created, Timestamp = DateTime.UtcNow });
         await context.CreateAsync(new UserLog { UserId = 1, Action = UserLogAction.Updated, Timestamp = DateTime.UtcNow });
 
@@ -291,7 +294,7 @@ public class DataContextTests
         var result = await context.CountAsync<UserLog>();
 
         // Assert: Verifies that the action of the method under test behaves as expected.
-        result.Should().Be(2);
+        result.Should().Be(before + 2);
     }
 
     private DataContext CreateContext() => new(Guid.NewGuid().ToString());
