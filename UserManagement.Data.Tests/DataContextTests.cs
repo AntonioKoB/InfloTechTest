@@ -265,8 +265,9 @@ public class DataContextTests
         // whole table via GetAllAsync and paging in memory - asserting against a real DataContext (not a
         // mock) is what actually proves Skip/Take/OrderBy compose correctly against EF Core.
         var context = CreateContext();
+
         var logs = Enumerable.Range(1, 5)
-            .Select(i => new UserLog { UserId = 1, Action = UserLogAction.Created, Timestamp = new DateTime(2026, 9, i, 12, 0, 0, DateTimeKind.Utc) })
+            .Select(i => new UserLog { UserId = 1, Action = UserLogAction.Created, Timestamp = DateTime.Now.AddDays(i) })
             .ToArray();
         foreach (var log in logs) await context.CreateAsync(log);
 

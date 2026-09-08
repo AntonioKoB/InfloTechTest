@@ -47,13 +47,12 @@ public class DataContext : DbContext, IDataContext
 
         model.Entity<User>().HasData(users);
 
-        var seededAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         model.Entity<UserLog>().HasData(users.Select(u => new UserLog
         {
             Id = u.Id,
             UserId = u.Id,
             Action = UserLogAction.Created,
-            Timestamp = seededAt.AddSeconds(u.Id),
+            Timestamp = DateTime.Now,
             AfterJson = JsonSerializer.Serialize(u)
         }));
     }
