@@ -11,20 +11,9 @@ namespace UserManagement.Data;
 
 public class DataContext : DbContext, IDataContext
 {
-    private readonly string _databaseName;
-
-    public DataContext() : this("UserManagement.Data.DataContext")
+    public DataContext(DbContextOptions<DataContext> options) : base(options)
     {
     }
-
-    public DataContext(string databaseName)
-    {
-        _databaseName = databaseName;
-        Database.EnsureCreated();
-    }
-
-    protected override void OnConfiguring(DbContextOptionsBuilder options)
-        => options.UseInMemoryDatabase(_databaseName);
 
     protected override void OnModelCreating(ModelBuilder model)
     {
