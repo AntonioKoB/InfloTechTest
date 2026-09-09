@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
 using UserManagement.Models;
@@ -217,34 +218,48 @@ public class UserServiceTests
     }
 
     [Fact]
-    public async Task DeleteAsync_WhenCalled_MustPersistViaDataContext()
+    public async Task DeleteAsync_WhenCalled_MustCallDeleteWhereAsyncWithMatchingIdPredicateWithoutFetchingFirst()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Proves the fetch-then-delete race is gone: DeleteAsync must go straight to a predicate-based bulk
+        // delete instead of fetching the entity via GetByIdAsync first - that fetch-then-mutate gap is what
+        // let a concurrent second delete find the row already gone and throw DbUpdateConcurrencyException.
         var service = CreateService();
-        var user = SetupUser(id: 5);
+        Expression<Func<User, bool>>? capturedPredicate = null;
+        _dataContext
+            .Setup(s => s.DeleteWhereAsync<User>(It.IsAny<Expression<Func<User, bool>>>()))
+            .Callback<Expression<Func<User, bool>>>(predicate => capturedPredicate = predicate)
+            .Returns(Task.CompletedTask);
 
         // Act: Invokes the method under test with the arranged parameters.
         await service.DeleteAsync(5);
 
         // Assert: Verifies that the action of the method under test behaves as expected.
-        _dataContext.Verify(s => s.DeleteAsync(user), Times.Once);
+        capturedPredicate.Should().NotBeNull();
+        capturedPredicate!.Compile()(new User { Id = 5, Forename = "A", Surname = "B", Email = "a@b.com", DateOfBirth = new DateOnly(1990, 1, 1) }).Should().BeTrue();
+        capturedPredicate!.Compile()(new User { Id = 6, Forename = "A", Surname = "B", Email = "a@b.com", DateOfBirth = new DateOnly(1990, 1, 1) }).Should().BeFalse();
+        _dataContext.Verify(s => s.GetByIdAsync<User>(It.IsAny<object>()), Times.Never);
     }
 
     [Fact]
-    public async Task DeleteAsync_WhenUserDoesNotExist_MustNotThrowAndMustNotCallDataContext()
+    public async Task DeleteAsync_WhenUserDoesNotExist_MustNotThrowAndMustStillCallDeleteWhereAsync()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // The fix makes delete idempotent by never creating the race window in the first place: a single
+        // predicate-based DELETE affecting zero rows (already-deleted, or never-existed, id) is not an error
+        // - unlike the old fetch-then-delete flow, which used to special-case this by checking existence
+        // first instead of just letting the underlying delete be a safe no-op.
         var service = CreateService();
         _dataContext
-            .Setup(s => s.GetByIdAsync<User>(It.IsAny<object>()))
-            .ReturnsAsync((User?)null);
+            .Setup(s => s.DeleteWhereAsync<User>(It.IsAny<Expression<Func<User, bool>>>()))
+            .Returns(Task.CompletedTask);
 
         // Act: Invokes the method under test with the arranged parameters.
         var act = () => service.DeleteAsync(999);
 
         // Assert: Verifies that the action of the method under test behaves as expected.
         await act.Should().NotThrowAsync();
-        _dataContext.Verify(s => s.DeleteAsync(It.IsAny<User>()), Times.Never);
+        _dataContext.Verify(s => s.DeleteWhereAsync<User>(It.IsAny<Expression<Func<User, bool>>>()), Times.Once);
     }
 
     [Fact]
@@ -314,9 +329,12 @@ public class UserServiceTests
 
         var users = new[] { activeUser, nonActiveUser };
 
+        // Compiles and applies the real predicate FilterByActiveAsync builds against an in-memory array -
+        // this proves the service pushes filtering down via WhereAsync rather than materializing everything
+        // via GetAllAsync and filtering in C#, not just that some mock returns canned data.
         _dataContext
-            .Setup(s => s.GetAllAsync<User>())
-            .ReturnsAsync(users);
+            .Setup(s => s.WhereAsync<User>(It.IsAny<Expression<Func<User, bool>>>()))
+            .ReturnsAsync((Expression<Func<User, bool>> predicate) => users.Where(predicate.Compile()));
 
         return (new[] { activeUser }, new[] { nonActiveUser });
     }

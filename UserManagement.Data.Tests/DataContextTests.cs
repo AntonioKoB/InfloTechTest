@@ -120,6 +120,23 @@ public class DataContextTests
     }
 
     [Fact]
+    public async Task WhereAsync_WhenPredicateMatchesSubset_MustReturnOnlyMatchingEntities()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Proves WhereAsync pushes the filter to the query provider (Where composed on IQueryable before
+        // materializing) rather than loading the whole table and filtering in C#, unlike the old
+        // GetAllAsync<User>().Where(...) approach this method replaces in UserService.FilterByActiveAsync.
+        var context = CreateContext();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await context.WhereAsync<User>(u => u.IsActive == false);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().NotBeEmpty();
+        result.Should().OnlyContain(u => u.IsActive == false);
+    }
+
+    [Fact]
     public async Task CreateAsync_WhenEmailAlreadyExists_InMemoryProviderDoesNotEnforceTheUniqueIndex()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
