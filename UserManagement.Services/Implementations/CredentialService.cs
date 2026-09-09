@@ -25,6 +25,8 @@ public class CredentialService : ICredentialService
         if (user is null || !user.IsActive || user.PasswordHash is null)
             return null;
 
+        // SuccessRehashNeeded (hash produced by an older format/work factor) still means the password was
+        // right - upgrading the stored hash on sign-in is a possible follow-up, not a reason to reject.
         var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
         return result == PasswordVerificationResult.Failed ? null : user;
     }
