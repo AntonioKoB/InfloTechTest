@@ -1,0 +1,24 @@
+@page "/users"
+
+<MudText Typo="Typo.h4" Class="mb-4">Users</MudText>
+
+<MudStack Row="true" Spacing="2" Class="mb-4">
+    <MudButton id="filter-all" OnClick="@(() => LoadAsync(UserListFilter.All))">All</MudButton>
+    <MudButton id="filter-active" OnClick="@(() => LoadAsync(UserListFilter.Active))">Active</MudButton>
+    <MudButton id="filter-nonactive" OnClick="@(() => LoadAsync(UserListFilter.NonActive))">Non Active</MudButton>
+    <MudSpacer />
+    <MudButton id="add-user-button" Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenAddModal">Add new user</MudButton>
+</MudStack>
+
+@foreach (var row in _rows)
+{
+    <UserRow @key="row.RowKey"
+             RowKey="row.RowKey"
+             User="row.User"
+             OnSaved="@(saved => HandleSaved(row.RowKey, saved))"
+             OnDeleted="@(() => RemoveRow(row.RowKey))" />
+}
+
+<AddUserModal Visible="_showAddModal"
+              OnSaved="HandleUserAdded"
+              OnCancelled="HandleAddCancelled" />

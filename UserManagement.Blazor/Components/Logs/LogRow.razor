@@ -1,0 +1,44 @@
+<MudCard Class="mb-3" Elevation="3">
+    <MudCardContent>
+        <div id="log-row-header" @onclick="ToggleExpand" style="cursor:pointer">
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                <span class="log-action log-action-@Log.Action.ToString().ToLowerInvariant()">@Log.Action</span>
+                <MudText Typo="Typo.subtitle1">User @Log.UserId</MudText>
+                <MudSpacer />
+                <MudText Typo="Typo.body2" Class="log-timestamp">@Log.Timestamp.ToString("dd MMM yyyy HH:mm")</MudText>
+            </MudStack>
+        </div>
+
+        @if (_expanded)
+        {
+            <div id="log-changes" class="mt-3">
+                @if (_changes.Count == 0)
+                {
+                    <MudText Typo="Typo.body2">No changes recorded</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="true" Striped="true" Bordered="true" Elevation="0">
+                        <thead>
+                            <tr>
+                                <th>Field</th>
+                                <th>Old Value</th>
+                                <th>New Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var change in _changes)
+                            {
+                                <tr>
+                                    <td>@change.PropertyName</td>
+                                    <td class="log-old-value">@(string.IsNullOrEmpty(change.OldValue) ? "—" : change.OldValue)</td>
+                                    <td class="log-new-value">@(string.IsNullOrEmpty(change.NewValue) ? "—" : change.NewValue)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </div>
+        }
+    </MudCardContent>
+</MudCard>

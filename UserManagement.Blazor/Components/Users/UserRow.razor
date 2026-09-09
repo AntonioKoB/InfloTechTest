@@ -1,0 +1,90 @@
+<MudCard Class="mb-3" Elevation="3">
+    <MudCardContent>
+        <div id="row-header" @onclick="ToggleExpand" style="cursor:pointer">
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                <div class="user-avatar">@Initials</div>
+                <div>
+                    <MudText Typo="Typo.subtitle1">@User.Forename @User.Surname</MudText>
+                    <div class="user-id">ID @User.Id</div>
+                </div>
+                <MudSpacer />
+                <MudIcon Icon="@(_expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                         Color="Color.Default" />
+            </MudStack>
+        </div>
+
+        @if (_expanded && _editing)
+        {
+            <MudDivider Class="my-3" />
+            <EditForm Model="_editModel" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+                <UserFormFields Model="_editModel" />
+                @if (_emailError is not null)
+                {
+                    <MudText id="email-error" Color="Color.Error" Class="mt-2">@_emailError</MudText>
+                }
+                <MudCardActions Class="pl-0">
+                    <MudButton id="save-button" ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary">Save</MudButton>
+                    <MudButton id="cancel-button" OnClick="Cancel" Variant="Variant.Text" Class="ml-2">Cancel</MudButton>
+                </MudCardActions>
+            </EditForm>
+        }
+        else if (_expanded)
+        {
+            <MudDivider Class="my-3" />
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <div class="detail-label">Surname</div>
+                    <MudText>@User.Surname</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <div class="detail-label">Email</div>
+                    <MudText>@User.Email</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <div class="detail-label">Date of Birth</div>
+                    <MudText>@User.DateOfBirth.ToString("dd MMM yyyy")</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <div class="detail-label">Status</div>
+                    <span class="status-badge status-@(User.IsActive ? "active" : "inactive")">
+                        @(User.IsActive ? "Active" : "Inactive")
+                    </span>
+                </MudItem>
+            </MudGrid>
+
+            <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Activity</MudText>
+            <div id="activity-log">
+                @if (_activityLogs.Count == 0)
+                {
+                    <MudText Typo="Typo.body2">No activity recorded</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="true" Striped="true" Bordered="true" Elevation="0">
+                        <thead>
+                            <tr>
+                                <th>Action</th>
+                                <th>When</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var log in _activityLogs)
+                            {
+                                <tr>
+                                    <td><span class="log-action log-action-@log.Action.ToString().ToLowerInvariant()">@log.Action</span></td>
+                                    <td>@log.Timestamp.ToString("dd MMM yyyy HH:mm")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </div>
+
+            <MudCardActions Class="pl-0">
+                <MudButton id="edit-button" OnClick="StartEdit" Variant="Variant.Filled" Color="Color.Primary">Edit</MudButton>
+                <MudButton id="delete-button" OnClick="DeleteAsync" Variant="Variant.Filled" Color="Color.Error" Class="ml-2">Delete</MudButton>
+            </MudCardActions>
+        }
+    </MudCardContent>
+</MudCard>

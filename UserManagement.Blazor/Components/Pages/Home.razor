@@ -1,0 +1,62 @@
+@page "/"
+@inject IUsersApi UsersApi
+
+<PageTitle>Home</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">User Management</MudText>
+
+@if (_userCount is null)
+{
+    <MudText>Loading...</MudText>
+}
+else
+{
+    <MudText>Connected to the API - @_userCount user(s) currently stored.</MudText>
+}
+
+<MudStack Row="true" Class="mt-4" Spacing="2">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/users">Go to Users</MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Secondary" Href="/logs">Go to Logs</MudButton>
+</MudStack>
+
+<footer class="requirements-footer">
+    <MudLink OnClick="ToggleRequirements" Class="requirements-toggle">
+        @(_showRequirements ? "▾" : "▸") Requirements
+    </MudLink>
+</footer>
+
+@if (_showRequirements)
+{
+    <div class="requirements-overlay">
+        <div class="requirements-overlay-header">
+            <MudText Typo="Typo.h5">Requirements</MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="ToggleRequirements" />
+        </div>
+        <div class="requirements-overlay-body">
+            @((MarkupString)_requirementsHtml!)
+        </div>
+    </div>
+}
+
+@code {
+    private int? _userCount;
+    private bool _showRequirements;
+    private string? _requirementsHtml;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var users = await UsersApi.GetUsersAsync();
+        _userCount = users.Count;
+    }
+
+    private void ToggleRequirements()
+    {
+        if (!_showRequirements && _requirementsHtml is null)
+        {
+            var markdown = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "README.md"));
+            _requirementsHtml = Markdig.Markdown.ToHtml(markdown);
+        }
+
+        _showRequirements = !_showRequirements;
+    }
+}
