@@ -16,3 +16,9 @@
 @using UserManagement.Blazor.Components.Layout
 @using UserManagement.Blazor.Components.Logs
 @using UserManagement.Blazor.Components.Users
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using UserManagement.Blazor.Components.Auth
+
+@* Every routable page requires a signed-in user unless it opts out with [AllowAnonymous] (the login page). *@
+@attribute [Authorize]

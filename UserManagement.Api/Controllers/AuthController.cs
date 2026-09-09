@@ -18,5 +18,20 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    public Task<ActionResult<LoginResponse>> Login(LoginRequest request) => throw new NotImplementedException();
+    [AllowAnonymous]
+    public async Task<ActionResult<LoginResponse>> Login(LoginRequest request)
+    {
+        var user = await _credentialService.AuthenticateAsync(request.Email, request.Password);
+        if (user is null) return Unauthorized();
+
+        var issued = _jwtTokenService.CreateToken(user);
+
+        return Ok(new LoginResponse
+        {
+            Token = issued.Value,
+            ExpiresAtUtc = issued.ExpiresAtUtc,
+            DisplayName = $"{user.Forename} {user.Surname}",
+            Email = user.Email
+        });
+    }
 }

@@ -5,6 +5,7 @@ using UserManagement.Services.Domain.Interfaces;
 namespace UserManagement.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/logs")]
 public class LogsController : ControllerBase
 {

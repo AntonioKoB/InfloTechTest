@@ -82,7 +82,7 @@ Each has a matching `*.Tests` project, except `UserManagement.Api.Contracts`, wh
 
 The API and the UI are two separate applications and both need to be running. The API must be reachable at the URL configured in `UserManagement.Blazor/appsettings.json` (`Api:BaseUrl`, `https://localhost:7085` by default).
 
-From two terminals, after completing the [Database](#database) setup:
+From two terminals, after completing the [Database](#database) setup and adding the [signing key](#setup-the-signing-key):
 
 ```bash
 dotnet run --project UserManagement.Api
@@ -150,7 +150,17 @@ Commit the generated files under `UserManagement.Data/Migrations` - they're appl
 
 ### 5. Production (Azure)
 
-Azure SQL is the intended production target - it's the same `Microsoft.EntityFrameworkCore.SqlServer` provider, so only the connection string changes, not the code. .NET User Secrets is a local-development-only mechanism (it's only loaded when `ASPNETCORE_ENVIRONMENT=Development`), so it plays no role in production. In Azure App Service, the equivalent is setting the connection string as an App Service Configuration value - this surfaces to the app as an environment variable, which ASP.NET Core's configuration system already reads automatically, so no code change is required. For stronger secret management (centralized rotation, RBAC-audited access) Azure Key Vault with a Managed Identity is a natural next step once a real deployment pipeline exists to attach it to.
+Azure SQL is the intended production target - it's the same `Microsoft.EntityFrameworkCore.SqlServer` provider, so only the connection string changes, not the code. .NET User Secrets is a local-development-only mechanism (it's only loaded when `ASPNETCORE_ENVIRONMENT=Development`), so it plays no role in production. In Azure App Service, the equivalent is setting each value as an App Service Configuration entry - these surface to the app as environment variables, which ASP.NET Core's configuration system already reads automatically, so no code change is required. For stronger secret management (centralized rotation, RBAC-audited access) Azure Key Vault with a Managed Identity is a natural next step once a real deployment pipeline exists to attach it to.
+
+Everything each app needs beyond its committed `appsettings.json`:
+
+| App | Setting | Local | Azure App Service |
+|---|---|---|---|
+| `UserManagement.Api` | `ConnectionStrings:DefaultConnection` | user secrets | connection string `DefaultConnection` (SQL Server) |
+| `UserManagement.Api` | `Jwt:SigningKey` (32+ random bytes) | user secrets | app setting `Jwt__SigningKey` |
+| `UserManagement.Blazor` | `Api:BaseUrl` (not a secret) | `appsettings.json` | app setting `Api__BaseUrl`, the deployed API's URL |
+
+The Blazor app's authentication cookie is protected with ASP.NET Core Data Protection keys. App Service keeps them per site by default; if the app is ever scaled out or swapped between slots, the key ring must be shared (Azure Blob storage plus Key Vault) so every instance accepts the others' cookies.
 
 ## UI architecture (Blazor)
 
@@ -164,7 +174,7 @@ The Blazor UI is a new project rather than an in-place conversion of `UserManage
 
 The UI runs on Blazor Server. Both hosting models share the same component model, so the choice comes down to where component code executes and what that implies:
 
-- **Security surface.** When authentication is added, the token can stay in the server-side circuit and never reach the browser. A WebAssembly client must hold its token in browser-accessible storage, which makes XSS a token-theft risk and is why production SPAs frequently front themselves with a backend-for-frontend to avoid exactly that.
+- **Security surface.** The API token never reaches browser script: it lives inside an encrypted, HttpOnly authentication cookie issued by the Blazor host and is attached to API calls on the server (see [Authentication](#authentication)). A WebAssembly client must hold its token in browser-accessible storage, which makes XSS a token-theft risk and is why production SPAs frequently front themselves with a backend-for-frontend to avoid exactly that.
 - **No CORS.** Component code runs server-side, so calls to the API are ordinary server-to-server requests with no browser origin involved. CORS is a browser-enforced mechanism and simply doesn't apply.
 - **No payload download.** There is no .NET runtime to download before first render.
 
@@ -191,7 +201,40 @@ Every user has a password, stored only as a hash (`User.PasswordHash`) produced 
 
 ### Authentication
 
-Not implemented yet. When it is added, the intended approach is a token issued on login and attached to the API calls, with the token held server-side by the Blazor app rather than in the browser.
+Login is "based on the users being stored": any active user signs in with their email and password (for the seeded users, any seeded email with the password `12345`, see [Credentials](#credentials)). Every page in the Blazor app, and every API endpoint except login, requires a signed-in user.
+
+#### Setup: the signing key
+
+The API signs and validates its tokens with a symmetric key that must be at least 32 bytes long. Like the connection string it is never committed, and the API fails at startup with an explanatory message if it is missing. Locally it goes in the API's user secrets, either from the `UserManagement.Api` folder:
+
+```bash
+dotnet user-secrets set "Jwt:SigningKey" "<a random string of at least 32 characters>"
+```
+
+or in Visual Studio: right-click `UserManagement.Api`, **Manage User Secrets**, and add the entry alongside the connection string:
+
+```json
+{
+  "ConnectionStrings:DefaultConnection": "...",
+  "Jwt:SigningKey": "<a random string of at least 32 characters>"
+}
+```
+
+Any random value works (for example the output of `openssl rand -base64 48`). Rotating it invalidates every issued token, so users just sign in again. Issuer, audience and token lifetime are ordinary settings in the `Jwt` section of `appsettings.json`.
+
+#### How it works
+
+1. The sign-in page posts its form to the Blazor host (`POST /login`), a genuine HTTP form post carrying an antiforgery token.
+2. The Blazor host calls the API's `POST /api/auth/login` with the credentials. The API verifies the password hash through `ICredentialService` and issues a signed JWT (HS256, 60 minutes by default) carrying the user's id, email and name.
+3. The Blazor host signs the browser in with an encrypted, HttpOnly authentication cookie whose principal carries the JWT as a claim. The token never reaches browser script, and the cookie expires when the token does.
+4. Every API call the Blazor app makes goes through `BearerTokenHandler`, which attaches the token as an `Authorization: Bearer` header. A 401 from the API forces a full reload of the sign-in page.
+5. `POST /logout`, also antiforgery-protected, clears the cookie.
+
+On the API, `UsersController` and `LogsController` carry `[Authorize]` and `AuthController.Login` carries `[AllowAnonymous]`; validation is the standard JWT bearer scheme. The API is bearer-only and sets no cookies, so cross-site request forgery does not apply to it. The antiforgery validation lives on the Blazor host's two form posts, the only requests that change the browser's sign-in state; a post without the token is rejected with a 400.
+
+#### Calling the API directly
+
+`POST /api/auth/login` with `{ "email": "...", "password": "..." }` returns the token, its expiry and the user's display name; send the token as `Authorization: Bearer <token>` on every other request.
 
 ## Static assets
 

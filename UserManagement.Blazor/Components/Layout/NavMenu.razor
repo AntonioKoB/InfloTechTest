@@ -1,1 +1,14 @@
-@* App-bar content: navigation, the signed-in user and logout. *@
+<MudText Typo="Typo.h6">User Management</MudText>
+<MudSpacer />
+<AuthorizeView>
+    <Authorized>
+        <MudButton id="nav-home" Href="/" Color="Color.Inherit">Home</MudButton>
+        <MudButton id="nav-users" Href="/users" Color="Color.Inherit">Users</MudButton>
+        <MudButton id="nav-logs" Href="/logs" Color="Color.Inherit">Logs</MudButton>
+        <span id="signed-in-user" class="signed-in-user">@context.User.Identity?.Name</span>
+        <form id="logout-form" method="post" action="/logout" class="logout-form">
+            <AntiforgeryToken />
+            <MudButton id="logout-button" ButtonType="ButtonType.Submit" Color="Color.Inherit">Logout</MudButton>
+        </form>
+    </Authorized>
+</AuthorizeView>

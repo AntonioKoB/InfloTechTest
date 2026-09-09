@@ -96,6 +96,7 @@ public class AuthControllerTests
         };
 
         _credentialService.Setup(s => s.AuthenticateAsync(user.Email, It.IsAny<string>())).ReturnsAsync(user);
+        _jwtTokenService.Setup(s => s.CreateToken(user)).Returns(new IssuedToken("signed.jwt.token", DateTime.UtcNow.AddHours(1)));
 
         return user;
     }

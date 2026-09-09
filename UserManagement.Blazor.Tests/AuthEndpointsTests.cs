@@ -84,6 +84,36 @@ public class AuthEndpointsTests
         _authenticationService.Verify(s => s.SignOutAsync(It.IsAny<HttpContext>(), CookieAuthenticationDefaults.AuthenticationScheme, It.IsAny<AuthenticationProperties?>()), Times.Once);
     }
 
+    [Fact]
+    public async Task LoginAsync_WhenTheAntiforgeryTokenWasNotValidated_MustReturnBadRequestWithoutCallingTheApi()
+    {
+        // Arrange
+        SetupSuccessfulLogin();
+
+        // Act
+        var result = await AuthEndpoints.LoginAsync(CreateRequest(), _authApi.Object, CreateHttpContext(antiforgeryValidationPassed: false));
+
+        // Assert
+        result.Should().BeAssignableTo<IStatusCodeHttpResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        _authApi.Verify(a => a.LoginAsync(It.IsAny<LoginRequest>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LogoutAsync_WhenTheAntiforgeryTokenWasNotValidated_MustReturnBadRequestWithoutSigningOut()
+    {
+        // Arrange
+        // The attribute alone is not enough for a handler that binds no form parameters: the middleware
+        // records the validation outcome but nothing turns a failure into a rejection, so a forged or
+        // token-less post would still sign the user out. The handler has to check the outcome itself.
+
+        // Act
+        var result = await AuthEndpoints.LogoutAsync(CreateHttpContext(antiforgeryValidationPassed: false));
+
+        // Assert
+        result.Should().BeAssignableTo<IStatusCodeHttpResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        _authenticationService.Verify(s => s.SignOutAsync(It.IsAny<HttpContext>(), It.IsAny<string>(), It.IsAny<AuthenticationProperties?>()), Times.Never);
+    }
+
     [Theory]
     [InlineData(nameof(AuthEndpoints.LoginAsync))]
     [InlineData(nameof(AuthEndpoints.LogoutAsync))]
@@ -119,10 +149,18 @@ public class AuthEndpointsTests
 
     private static LoginRequest CreateRequest() => new() { Email = "ploew@example.com", Password = "12345" };
 
-    private HttpContext CreateHttpContext() => new DefaultHttpContext
+    private HttpContext CreateHttpContext(bool antiforgeryValidationPassed = true)
     {
-        RequestServices = new ServiceCollection().AddSingleton(_authenticationService.Object).BuildServiceProvider()
-    };
+        var httpContext = new DefaultHttpContext
+        {
+            RequestServices = new ServiceCollection().AddSingleton(_authenticationService.Object).BuildServiceProvider()
+        };
+
+        // What the antiforgery middleware leaves behind after checking the token on a real request.
+        httpContext.Features.Set<IAntiforgeryValidationFeature>(new StubAntiforgeryValidationFeature(antiforgeryValidationPassed));
+
+        return httpContext;
+    }
 
     private static async Task<ApiException> CreateUnauthorizedException()
     {
@@ -133,4 +171,11 @@ public class AuthEndpointsTests
 
     private readonly Mock<IAuthApi> _authApi = new();
     private readonly Mock<IAuthenticationService> _authenticationService = new();
+
+    // The framework's own implementation is internal; the interface is all the handlers depend on.
+    private sealed class StubAntiforgeryValidationFeature(bool isValid) : IAntiforgeryValidationFeature
+    {
+        public bool IsValid => isValid;
+        public Exception? Error => null;
+    }
 }

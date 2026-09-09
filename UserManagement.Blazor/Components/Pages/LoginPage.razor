@@ -1,1 +1,23 @@
 @page "/login"
+@attribute [AllowAnonymous]
+
+<PageTitle>Sign in</PageTitle>
+
+<div class="login-wrapper">
+    <MudPaper Class="login-panel pa-6" Elevation="4">
+        <MudText Typo="Typo.h5" Class="mb-1">Sign in</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">Use the email and password of a stored user.</MudText>
+        <form method="post" action="/login">
+            <AntiforgeryToken />
+            <label class="field-label" for="input-email">Email</label>
+            <input id="input-email" name="Email" type="email" class="field-input" required autocomplete="username" autofocus />
+            <label class="field-label mt-3" for="input-password">Password</label>
+            <input id="input-password" name="Password" type="password" class="field-input" required autocomplete="current-password" />
+            @if (Error is not null)
+            {
+                <MudText id="login-error" Color="Color.Error" Class="mt-3">Invalid email or password.</MudText>
+            }
+            <MudButton id="login-button" ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mt-4">Sign in</MudButton>
+        </form>
+    </MudPaper>
+</div>

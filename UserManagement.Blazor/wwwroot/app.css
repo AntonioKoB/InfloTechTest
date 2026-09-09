@@ -171,3 +171,25 @@ h1:focus {
     color: #2e7d32;
     font-weight: 500;
 }
+/* Sign-in page and app-bar session controls. Global for the same reason as the form fields above. */
+.login-wrapper {
+    display: flex;
+    justify-content: center;
+    padding: 3rem 1rem;
+}
+
+.login-panel {
+    width: 100%;
+    max-width: 420px;
+}
+
+.signed-in-user {
+    margin: 0 0.75rem 0 1.5rem;
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.logout-form {
+    display: inline;
+    margin: 0;
+}
