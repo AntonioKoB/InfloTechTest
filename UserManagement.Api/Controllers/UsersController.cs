@@ -12,11 +12,13 @@ public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
     private readonly IUserLogService _userLogService;
+    private readonly ICredentialService _credentialService;
 
-    public UsersController(IUserService userService, IUserLogService userLogService)
+    public UsersController(IUserService userService, IUserLogService userLogService, ICredentialService credentialService)
     {
         _userService = userService;
         _userLogService = userLogService;
+        _credentialService = credentialService;
     }
 
     [HttpGet]

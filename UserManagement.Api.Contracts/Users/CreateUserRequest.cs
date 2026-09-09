@@ -15,4 +15,6 @@ public class CreateUserRequest
     public DateOnly? DateOfBirth { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    public string Password { get; set; } = "";
 }

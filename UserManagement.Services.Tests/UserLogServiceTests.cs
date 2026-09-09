@@ -58,6 +58,31 @@ public class UserLogServiceTests
     }
 
     [Fact]
+    public async Task RecordAsync_MustNeverIncludeThePasswordHashInEitherSnapshot()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Snapshots are rendered on screen as the before/after diff and stay in the log table forever - a
+        // credential has no business there, hashed or not. Serializing the whole User must therefore leave
+        // PasswordHash out, not just avoid displaying it.
+        var service = CreateService();
+        var before = new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1), PasswordHash = "hash-before" };
+        var after = new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1), PasswordHash = "hash-after" };
+        UserLog? captured = null;
+        _dataContext
+            .Setup(s => s.CreateAsync(It.IsAny<UserLog>()))
+            .Callback<UserLog>(log => captured = log)
+            .Returns(Task.CompletedTask);
+
+        // Act: Invokes the method under test with the arranged parameters.
+        await service.RecordAsync(5, UserLogAction.Updated, before, after);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        captured.Should().NotBeNull();
+        captured!.BeforeJson.Should().NotContain(nameof(User.PasswordHash)).And.NotContain("hash-before");
+        captured.AfterJson.Should().NotContain(nameof(User.PasswordHash)).And.NotContain("hash-after");
+    }
+
+    [Fact]
     public async Task RecordAsync_WhenAfterIsNull_MustPersistLogWithNullAfterJson()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
