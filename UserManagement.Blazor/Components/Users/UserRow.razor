@@ -1,188 +1,90 @@
-@using System.ComponentModel.DataAnnotations
-@using System.Linq
-@using System.Net
-@using Microsoft.AspNetCore.Mvc
-@using Refit
-@inject IUsersApi UsersApi
-@inject ISnackbar Snackbar
-
-<div class="user-row">
-    @if (!IsNew)
-    {
+<MudCard Class="mb-3" Elevation="3">
+    <MudCardContent>
         <div id="row-header" @onclick="ToggleExpand" style="cursor:pointer">
-            @User.Id - @User.Forename @User.Surname
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                <div class="user-avatar">@Initials</div>
+                <div>
+                    <MudText Typo="Typo.subtitle1">@User.Forename @User.Surname</MudText>
+                    <div class="user-id">ID @User.Id</div>
+                </div>
+                <MudSpacer />
+                <MudIcon Icon="@(_expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                         Color="Color.Default" />
+            </MudStack>
         </div>
-    }
 
-    @if (IsNew || (_expanded && _editing))
-    {
-        <EditForm Model="_editModel" OnValidSubmit="SaveAsync">
-            <DataAnnotationsValidator />
-            <div>
-                <label>Forename</label>
-                <InputText @bind-Value="_editModel.Forename" />
-            </div>
-            <div>
-                <label>Surname</label>
-                <InputText @bind-Value="_editModel.Surname" />
-            </div>
-            <div>
-                <label>Email</label>
-                <InputText @bind-Value="_editModel.Email" />
-            </div>
-            <div>
-                <label>Date of Birth</label>
-                <InputDate @bind-Value="_editModel.DateOfBirth" />
-            </div>
-            <div>
-                <label>Active</label>
-                <InputCheckbox @bind-Value="_editModel.IsActive" />
-            </div>
-            @if (_emailError is not null)
-            {
-                <MudText id="email-error" Color="Color.Error">@_emailError</MudText>
-            }
-            <MudButton id="save-button" ButtonType="ButtonType.Submit">Save</MudButton>
-            <MudButton id="cancel-button" OnClick="Cancel">Cancel</MudButton>
-        </EditForm>
-    }
-    else if (_expanded)
-    {
-        <div>
-            <div>Surname: @User.Surname</div>
-            <div>Email: @User.Email</div>
-            <div>Date of Birth: @User.DateOfBirth</div>
-            <div>Active: @User.IsActive</div>
-            <div id="activity-log">
-                @foreach (var log in _activityLogs)
+        @if (_expanded && _editing)
+        {
+            <MudDivider Class="my-3" />
+            <EditForm Model="_editModel" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+                <UserFormFields Model="_editModel" />
+                @if (_emailError is not null)
                 {
-                    <div>@log.Action - @log.Timestamp</div>
+                    <MudText id="email-error" Color="Color.Error" Class="mt-2">@_emailError</MudText>
+                }
+                <MudCardActions Class="pl-0">
+                    <MudButton id="save-button" ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary">Save</MudButton>
+                    <MudButton id="cancel-button" OnClick="Cancel" Variant="Variant.Text" Class="ml-2">Cancel</MudButton>
+                </MudCardActions>
+            </EditForm>
+        }
+        else if (_expanded)
+        {
+            <MudDivider Class="my-3" />
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <div class="detail-label">Surname</div>
+                    <MudText>@User.Surname</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <div class="detail-label">Email</div>
+                    <MudText>@User.Email</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <div class="detail-label">Date of Birth</div>
+                    <MudText>@User.DateOfBirth.ToString("dd MMM yyyy")</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <div class="detail-label">Status</div>
+                    <span class="status-badge status-@(User.IsActive ? "active" : "inactive")">
+                        @(User.IsActive ? "Active" : "Inactive")
+                    </span>
+                </MudItem>
+            </MudGrid>
+
+            <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Activity</MudText>
+            <div id="activity-log">
+                @if (_activityLogs.Count == 0)
+                {
+                    <MudText Typo="Typo.body2">No activity recorded</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="true" Striped="true" Bordered="true" Elevation="0">
+                        <thead>
+                            <tr>
+                                <th>Action</th>
+                                <th>When</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var log in _activityLogs)
+                            {
+                                <tr>
+                                    <td><span class="log-action log-action-@log.Action.ToString().ToLowerInvariant()">@log.Action</span></td>
+                                    <td>@log.Timestamp.ToString("dd MMM yyyy HH:mm")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
                 }
             </div>
-            <MudButton id="edit-button" OnClick="StartEdit">Edit</MudButton>
-            <MudButton id="delete-button" OnClick="DeleteAsync">Delete</MudButton>
-        </div>
-    }
-</div>
 
-@code {
-    [Parameter, EditorRequired] public Guid RowKey { get; set; }
-    [Parameter, EditorRequired] public UserDto User { get; set; } = default!;
-    [Parameter] public bool IsNew { get; set; }
-    [Parameter] public EventCallback<UserDto> OnSaved { get; set; }
-    [Parameter] public EventCallback OnDeleted { get; set; }
-    [Parameter] public EventCallback OnDiscardedNew { get; set; }
-
-    private bool _expanded;
-    private bool _editing;
-    private string? _emailError;
-    private IReadOnlyList<UserLogDto> _activityLogs = [];
-    private EditModel _editModel = new();
-
-    protected override void OnParametersSet()
-    {
-        if (IsNew)
-        {
-            _editModel = ToEditModel(User);
+            <MudCardActions Class="pl-0">
+                <MudButton id="edit-button" OnClick="StartEdit" Variant="Variant.Filled" Color="Color.Primary">Edit</MudButton>
+                <MudButton id="delete-button" OnClick="DeleteAsync" Variant="Variant.Filled" Color="Color.Error" Class="ml-2">Delete</MudButton>
+            </MudCardActions>
         }
-    }
-
-    private async Task ToggleExpand()
-    {
-        if (!_expanded)
-        {
-            User = await UsersApi.GetUserByIdAsync(User.Id, recordAsViewed: true);
-            _activityLogs = await UsersApi.GetUserLogsAsync(User.Id);
-        }
-
-        _expanded = !_expanded;
-    }
-
-    private void StartEdit()
-    {
-        _editModel = ToEditModel(User);
-        _emailError = null;
-        _editing = true;
-    }
-
-    private void Cancel()
-    {
-        if (IsNew)
-        {
-            OnDiscardedNew.InvokeAsync();
-            return;
-        }
-
-        _editing = false;
-        _emailError = null;
-    }
-
-    private async Task SaveAsync()
-    {
-        _emailError = null;
-
-        try
-        {
-            UserDto saved;
-            if (IsNew)
-            {
-                saved = await UsersApi.CreateUserAsync(new CreateUserRequest
-                {
-                    Forename = _editModel.Forename,
-                    Surname = _editModel.Surname,
-                    Email = _editModel.Email,
-                    DateOfBirth = _editModel.DateOfBirth,
-                    IsActive = _editModel.IsActive
-                });
-            }
-            else
-            {
-                saved = await UsersApi.UpdateUserAsync(User.Id, new UpdateUserRequest
-                {
-                    Forename = _editModel.Forename,
-                    Surname = _editModel.Surname,
-                    Email = _editModel.Email,
-                    DateOfBirth = _editModel.DateOfBirth,
-                    IsActive = _editModel.IsActive
-                });
-            }
-
-            User = saved;
-            _editing = false;
-            Snackbar.Add(IsNew ? "User created successfully" : "User saved successfully", Severity.Success);
-            await OnSaved.InvokeAsync(saved);
-        }
-        catch (ApiException ex) when (ex.StatusCode == HttpStatusCode.BadRequest)
-        {
-            var problem = await ex.GetContentAsAsync<ValidationProblemDetails>();
-            _emailError = problem?.Errors.TryGetValue("Email", out var emailErrors) == true
-                ? emailErrors.FirstOrDefault()
-                : "This email is already in use.";
-        }
-    }
-
-    private async Task DeleteAsync()
-    {
-        await UsersApi.DeleteUserAsync(User.Id);
-        Snackbar.Add("User deleted", Severity.Success);
-        await OnDeleted.InvokeAsync();
-    }
-
-    private static EditModel ToEditModel(UserDto user) => new()
-    {
-        Forename = user.Forename,
-        Surname = user.Surname,
-        Email = user.Email,
-        DateOfBirth = user.DateOfBirth,
-        IsActive = user.IsActive
-    };
-
-    private class EditModel
-    {
-        [Required] public string Forename { get; set; } = "";
-        [Required] public string Surname { get; set; } = "";
-        [Required, EmailAddress] public string Email { get; set; } = "";
-        [Required] public DateOnly? DateOfBirth { get; set; }
-        public bool IsActive { get; set; } = true;
-    }
-}
+    </MudCardContent>
+</MudCard>

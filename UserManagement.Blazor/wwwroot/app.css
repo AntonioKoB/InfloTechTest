@@ -36,3 +36,127 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+/* Shared user form fields. Global rather than component-scoped because Blazor's CSS
+   isolation does not tag markup rendered by child components such as InputText. */
+.field-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: rgba(0, 0, 0, 0.6);
+    margin-bottom: 0.25rem;
+}
+
+.field-label-inline {
+    display: inline-block;
+    margin-right: 0.5rem;
+    margin-bottom: 0;
+    vertical-align: middle;
+}
+
+.field-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.95rem;
+    font-family: inherit;
+    color: rgba(0, 0, 0, 0.87);
+    background-color: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.23);
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.field-input:hover {
+    border-color: rgba(0, 0, 0, 0.6);
+}
+
+.field-input:focus {
+    border-color: var(--mud-palette-primary, #594ae2);
+    box-shadow: 0 0 0 1px var(--mud-palette-primary, #594ae2);
+}
+
+.field-checkbox {
+    width: 1.1rem;
+    height: 1.1rem;
+    vertical-align: middle;
+    accent-color: var(--mud-palette-primary, #594ae2);
+}
+
+/* User rows and detail panels. Global for the same reason as the form fields above. */
+.user-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: var(--mud-palette-primary, #594ae2);
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+
+.user-id {
+    font-size: 0.75rem;
+    color: rgba(0, 0, 0, 0.6);
+}
+
+.detail-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(0, 0, 0, 0.55);
+    margin-bottom: 0.15rem;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 0.15rem 0.7rem;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #fff;
+}
+
+.status-active { background-color: #2e7d32; }
+.status-inactive { background-color: #757575; }
+
+/* Log entries. Global for the same reason as the form fields above - these style
+   markup rendered by MudBlazor components, which component-scoped CSS cannot reach. */
+.log-action {
+    display: inline-block;
+    min-width: 4.5rem;
+    padding: 0.15rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    text-align: center;
+    color: #fff;
+}
+
+.log-action-created { background-color: #2e7d32; }
+.log-action-updated { background-color: #0288d1; }
+.log-action-deleted { background-color: #c62828; }
+.log-action-viewed { background-color: #757575; }
+
+.log-timestamp {
+    color: rgba(0, 0, 0, 0.6);
+}
+
+.log-old-value {
+    color: #c62828;
+    text-decoration: line-through;
+}
+
+.log-new-value {
+    color: #2e7d32;
+    font-weight: 500;
+}

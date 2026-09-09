@@ -1,0 +1,15 @@
+.add-user-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.add-user-panel {
+    width: 100%;
+    max-width: 500px;
+    margin: 1rem;
+}

@@ -27,11 +27,13 @@ var apiBaseUrl = new Uri(builder.Configuration["Api:BaseUrl"]!);
 
 builder.Services.AddHttpClient(nameof(IUsersApi))
     .AddRefitClient<IUsersApi>(refitSettings)
-    .ConfigureHttpClient(c => c.BaseAddress = apiBaseUrl);
+    .ConfigureHttpClient(c => c.BaseAddress = apiBaseUrl)
+    .AddStandardResilienceHandler();
 
 builder.Services.AddHttpClient(nameof(ILogsApi))
     .AddRefitClient<ILogsApi>(refitSettings)
-    .ConfigureHttpClient(c => c.BaseAddress = apiBaseUrl);
+    .ConfigureHttpClient(c => c.BaseAddress = apiBaseUrl)
+    .AddStandardResilienceHandler();
 
 var app = builder.Build();
 

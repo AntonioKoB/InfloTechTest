@@ -1,5 +1,4 @@
 @page "/logs"
-@inject ILogsApi LogsApi
 
 <MudText Typo="Typo.h4" Class="mb-4">Logs</MudText>
 
@@ -13,23 +12,3 @@
     <div id="page-info">Page @_page of @_totalPages</div>
     <MudButton id="next-page-button" OnClick="NextPage" Disabled="@(_page >= _totalPages)">Next</MudButton>
 </MudStack>
-
-@code {
-    private const int PageSize = 10;
-    private int _page = 1;
-    private int _totalPages = 1;
-    private IReadOnlyList<UserLogDto> _items = [];
-
-    protected override async Task OnInitializedAsync() => await LoadAsync(1);
-
-    private async Task LoadAsync(int page)
-    {
-        var result = await LogsApi.GetLogsAsync(page, PageSize);
-        _items = result.Items;
-        _page = result.Page;
-        _totalPages = result.TotalPages;
-    }
-
-    private Task PreviousPage() => LoadAsync(_page - 1);
-    private Task NextPage() => LoadAsync(_page + 1);
-}

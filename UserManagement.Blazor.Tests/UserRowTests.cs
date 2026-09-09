@@ -82,7 +82,7 @@ public class UserRowTests : BunitContext
         // Assert
         cut.Markup.Should().Contain(user.Surname)
             .And.Contain(user.Email)
-            .And.Contain(user.DateOfBirth.ToString())
+            .And.Contain(user.DateOfBirth.ToString("dd MMM yyyy"))
             .And.Contain("Created");
     }
 
@@ -197,63 +197,6 @@ public class UserRowTests : BunitContext
         // Assert
         cut.Find("#email-error").TextContent.Should().Contain("already exists");
         wasSaved.Should().BeFalse();
-    }
-
-    [Fact]
-    public void NewRow_MustRenderEditableFormImmediately()
-    {
-        // Arrange
-        var blank = new UserDto { IsActive = true };
-
-        // Act
-        var cut = Render<UserRow>(p => p
-            .Add(x => x.RowKey, Guid.NewGuid())
-            .Add(x => x.User, blank)
-            .Add(x => x.IsNew, true));
-
-        // Assert
-        cut.FindAll("input").Should().NotBeEmpty();
-        cut.Find("#save-button").Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task NewRow_ClickSave_MustCallCreateNotUpdateAndClearIsNew()
-    {
-        // Arrange
-        var blank = new UserDto { IsActive = true, Forename = "New", Surname = "User", Email = "new@example.com", DateOfBirth = new DateOnly(2000, 1, 1) };
-        var created = new UserDto { Id = 99, Forename = blank.Forename, Surname = blank.Surname, Email = blank.Email, IsActive = blank.IsActive, DateOfBirth = blank.DateOfBirth };
-        _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>())).ReturnsAsync(created);
-        var cut = Render<UserRow>(p => p
-            .Add(x => x.RowKey, Guid.NewGuid())
-            .Add(x => x.User, blank)
-            .Add(x => x.IsNew, true));
-
-        // Act
-        await cut.InvokeAsync(() => cut.Find("#save-button").Click());
-
-        // Assert
-        _usersApi.Verify(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>()), Times.Once);
-        _usersApi.Verify(a => a.UpdateUserAsync(It.IsAny<long>(), It.IsAny<UpdateUserRequest>()), Times.Never);
-    }
-
-    [Fact]
-    public void NewRow_ClickCancel_MustRaiseOnDiscardedNewWithoutCallingApi()
-    {
-        // Arrange
-        var blank = new UserDto { IsActive = true };
-        var wasDiscarded = false;
-        var cut = Render<UserRow>(p => p
-            .Add(x => x.RowKey, Guid.NewGuid())
-            .Add(x => x.User, blank)
-            .Add(x => x.IsNew, true)
-            .Add(x => x.OnDiscardedNew, () => wasDiscarded = true));
-
-        // Act
-        cut.Find("#cancel-button").Click();
-
-        // Assert
-        wasDiscarded.Should().BeTrue();
-        _usersApi.Verify(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>()), Times.Never);
     }
 
     [Fact]

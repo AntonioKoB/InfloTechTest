@@ -1,6 +1,4 @@
 @page "/users"
-@using System.Linq
-@inject IUsersApi UsersApi
 
 <MudText Typo="Typo.h4" Class="mb-4">Users</MudText>
 
@@ -9,7 +7,7 @@
     <MudButton id="filter-active" OnClick="@(() => LoadAsync(UserListFilter.Active))">Active</MudButton>
     <MudButton id="filter-nonactive" OnClick="@(() => LoadAsync(UserListFilter.NonActive))">Non Active</MudButton>
     <MudSpacer />
-    <MudButton id="add-user-button" Variant="Variant.Filled" Color="Color.Primary" OnClick="AddNew">Add new user</MudButton>
+    <MudButton id="add-user-button" Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenAddModal">Add new user</MudButton>
 </MudStack>
 
 @foreach (var row in _rows)
@@ -17,43 +15,10 @@
     <UserRow @key="row.RowKey"
              RowKey="row.RowKey"
              User="row.User"
-             IsNew="row.IsNew"
              OnSaved="@(saved => HandleSaved(row.RowKey, saved))"
-             OnDeleted="@(() => HandleDeleted(row.RowKey))"
-             OnDiscardedNew="@(() => HandleDiscardedNew(row.RowKey))" />
+             OnDeleted="@(() => RemoveRow(row.RowKey))" />
 }
 
-@code {
-    private List<RowState> _rows = [];
-
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadAsync(UserListFilter.All);
-    }
-
-    private async Task LoadAsync(UserListFilter filter)
-    {
-        var users = await UsersApi.GetUsersAsync(filter);
-        _rows = users.Select(u => new RowState(Guid.NewGuid(), u, false)).ToList();
-    }
-
-    private void AddNew()
-    {
-        _rows.Add(new RowState(Guid.NewGuid(), new UserDto { IsActive = true }, true));
-    }
-
-    private void HandleSaved(Guid rowKey, UserDto saved)
-    {
-        var index = _rows.FindIndex(r => r.RowKey == rowKey);
-        if (index >= 0)
-        {
-            _rows[index] = new RowState(rowKey, saved, false);
-        }
-    }
-
-    private void HandleDeleted(Guid rowKey) => _rows.RemoveAll(r => r.RowKey == rowKey);
-
-    private void HandleDiscardedNew(Guid rowKey) => _rows.RemoveAll(r => r.RowKey == rowKey);
-
-    private record RowState(Guid RowKey, UserDto User, bool IsNew);
-}
+<AddUserModal Visible="_showAddModal"
+              OnSaved="HandleUserAdded"
+              OnCancelled="HandleAddCancelled" />

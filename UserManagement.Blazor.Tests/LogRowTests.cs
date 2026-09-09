@@ -29,7 +29,7 @@ public class LogRowTests : BunitContext
         // Assert
         cut.Markup.Should().Contain(log.UserId.ToString())
             .And.Contain(log.Action.ToString())
-            .And.Contain(log.Timestamp.ToString());
+            .And.Contain(log.Timestamp.ToString("dd MMM yyyy HH:mm"));
     }
 
     [Fact]

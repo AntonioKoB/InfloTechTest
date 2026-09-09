@@ -51,19 +51,53 @@ public class UsersPageTests : BunitContext
     }
 
     [Fact]
-    public void ClickAddNewUser_MustAppendBlankEditableRow()
+    public void ClickAddNewUser_MustOpenTheAddModal()
     {
         // Arrange
         _usersApi.Setup(a => a.GetUsersAsync(UserListFilter.All)).ReturnsAsync([]);
         var cut = Render<UsersPage>();
+        cut.FindComponent<AddUserModal>().Instance.Visible.Should().BeFalse();
 
         // Act
         cut.Find("#add-user-button").Click();
 
         // Assert
-        var rows = cut.FindComponents<UserRow>();
-        rows.Should().HaveCount(1);
-        rows[0].Instance.IsNew.Should().BeTrue();
+        cut.FindComponent<AddUserModal>().Instance.Visible.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ModalOnSaved_MustAppendCreatedUserAndCloseModal()
+    {
+        // Arrange
+        _usersApi.Setup(a => a.GetUsersAsync(UserListFilter.All)).ReturnsAsync([]);
+        var cut = Render<UsersPage>();
+        cut.Find("#add-user-button").Click();
+        var modal = cut.FindComponent<AddUserModal>();
+        var created = SetupUser(5, "Brand New");
+
+        // Act
+        await cut.InvokeAsync(() => modal.Instance.OnSaved.InvokeAsync(created));
+
+        // Assert
+        cut.FindComponents<UserRow>().Should().ContainSingle(r => r.Instance.User.Forename == "Brand New");
+        cut.FindComponent<AddUserModal>().Instance.Visible.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ModalOnCancelled_MustCloseModalWithoutAddingRow()
+    {
+        // Arrange
+        _usersApi.Setup(a => a.GetUsersAsync(UserListFilter.All)).ReturnsAsync([]);
+        var cut = Render<UsersPage>();
+        cut.Find("#add-user-button").Click();
+        var modal = cut.FindComponent<AddUserModal>();
+
+        // Act
+        await cut.InvokeAsync(() => modal.Instance.OnCancelled.InvokeAsync());
+
+        // Assert
+        cut.FindComponents<UserRow>().Should().BeEmpty();
+        cut.FindComponent<AddUserModal>().Instance.Visible.Should().BeFalse();
     }
 
     [Fact]
@@ -94,22 +128,6 @@ public class UsersPageTests : BunitContext
 
         // Act
         await cut.InvokeAsync(() => row.Instance.OnDeleted.InvokeAsync());
-
-        // Assert
-        cut.FindComponents<UserRow>().Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task RowOnDiscardedNew_MustRemoveMatchingRowFromList()
-    {
-        // Arrange
-        _usersApi.Setup(a => a.GetUsersAsync(UserListFilter.All)).ReturnsAsync([]);
-        var cut = Render<UsersPage>();
-        cut.Find("#add-user-button").Click();
-        var row = cut.FindComponent<UserRow>();
-
-        // Act
-        await cut.InvokeAsync(() => row.Instance.OnDiscardedNew.InvokeAsync());
 
         // Assert
         cut.FindComponents<UserRow>().Should().BeEmpty();

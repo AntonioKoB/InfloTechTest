@@ -119,3 +119,7 @@ Azure SQL is the intended production target - it's the same `Microsoft.EntityFra
 ## Static assets (bundling)
 
 CSS and JS are bundled and minified via [`LigerShark.WebOptimizer.Core`](https://github.com/ligershark/WebOptimizer), configured in `UserManagement.Web/Program.cs`. Bootstrap's CSS + the site's own `site.css` are combined into a single `/css/bundle.css`, and jQuery + Bootstrap's JS bundle + `site.js` into a single `/js/bundle.js` - `_Layout.cshtml` references only these two files instead of the five individual ones. No extra tooling or build step is required; the middleware bundles/minifies on first request and serves from cache after that.
+
+## API client resiliency (Blazor)
+
+The Blazor app's calls to `UserManagement.Api` (via the `IUsersApi`/`ILogsApi` Refit clients) go through [`Microsoft.Extensions.Http.Resilience`](https://learn.microsoft.com/dotnet/core/resilience/http-resilience) - Microsoft's own resilience package, built on [Polly](https://github.com/App-vNext/Polly) v8. It's wired in `UserManagement.Blazor/Program.cs` via `.AddStandardResilienceHandler()` on each `HttpClient`, which bundles retry (with exponential backoff), a per-attempt and total-request timeout, a circuit breaker, and a concurrency rate limiter in one call, rather than hand-wiring individual Polly policies.

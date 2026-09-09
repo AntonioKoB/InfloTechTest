@@ -1,0 +1,23 @@
+@if (Visible)
+{
+    <div class="add-user-overlay">
+        <MudPaper Class="add-user-panel pa-4" Elevation="4">
+            <div class="d-flex justify-space-between align-center mb-2">
+                <MudText Typo="Typo.h5">Add New User</MudText>
+                <MudIconButton id="close-button" Icon="@Icons.Material.Filled.Close" OnClick="Cancel" />
+            </div>
+            <EditForm Model="_model" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+                <UserFormFields Model="_model" />
+                @if (_emailError is not null)
+                {
+                    <MudText id="email-error" Color="Color.Error" Class="mt-2">@_emailError</MudText>
+                }
+                <MudCardActions Class="pl-0 mt-2">
+                    <MudButton id="save-button" ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary">Save</MudButton>
+                    <MudButton id="cancel-button" OnClick="Cancel" Variant="Variant.Text" Class="ml-2">Cancel</MudButton>
+                </MudCardActions>
+            </EditForm>
+        </MudPaper>
+    </div>
+}
