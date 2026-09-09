@@ -2,7 +2,7 @@
     <MudCardContent>
         <div id="log-row-header" @onclick="ToggleExpand" style="cursor:pointer">
             <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
-                <span class="log-action log-action-@Log.Action.ToString().ToLowerInvariant()">@Log.Action</span>
+                <span class="log-action log-action-@Log.Action.ToCssModifier()">@Log.Action.ToDisplayName()</span>
                 <MudText Typo="Typo.subtitle1">User @Log.UserId</MudText>
                 <MudSpacer />
                 <MudText Typo="Typo.body2" Class="log-timestamp">@Log.Timestamp.ToString("dd MMM yyyy HH:mm")</MudText>

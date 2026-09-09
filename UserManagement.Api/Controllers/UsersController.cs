@@ -7,6 +7,7 @@ using UserManagement.Services.Domain.Interfaces;
 namespace UserManagement.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/users")]
 public class UsersController : ControllerBase
 {

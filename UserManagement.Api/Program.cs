@@ -1,16 +1,18 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Scalar.AspNetCore;
-using System.Text.Json.Serialization;
+using UserManagement.Api.Auth;
 using UserManagement.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services
     .AddDataAccess(builder.Configuration)
-    .AddDomainServices();
+    .AddDomainServices()
+    .AddJwtAuthentication(builder.Configuration, builder.Environment);
 
 builder.Services
     .AddControllers()
@@ -35,6 +37,7 @@ app.UseHsts();
 app.UseHttpsRedirection();
 
 app.UseRouting();
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

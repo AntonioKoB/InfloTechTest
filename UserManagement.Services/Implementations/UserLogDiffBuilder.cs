@@ -12,10 +12,11 @@ public class UserLogDiffBuilder : IUserLogDiffBuilder
 {
     public IReadOnlyList<FieldChange> Build(UserLog log)
     {
-        // Viewed never represents a change - it just happens to have an After snapshot (for display
-        // purposes on the View screen), which would otherwise look identical to Created's "nothing -> full
-        // state" shape. Nothing actually changed, so there's nothing to diff.
-        if (log.Action == UserLogAction.Viewed)
+        // Only Created, Updated and Deleted describe a change to the user. Viewed carries an After snapshot
+        // (for display on the View screen) that would otherwise look identical to Created's "nothing -> full
+        // state" shape, and LoggedIn/LoggedOut carry no snapshot at all. Nothing changed in any of them, so
+        // there is nothing to diff.
+        if (log.Action is UserLogAction.Viewed or UserLogAction.LoggedIn or UserLogAction.LoggedOut)
             return [];
 
         var before = log.BeforeJson is null ? null : JsonSerializer.Deserialize<User>(log.BeforeJson);

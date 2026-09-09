@@ -18,5 +18,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IUserLogService>(),
                 sp.GetRequiredService<IDataContext>()))
             .AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>()
-            .AddScoped<ICredentialService, CredentialService>();
+            .AddScoped<CredentialService>()
+            .AddScoped<ICredentialService>(sp => new AuditingCredentialService(
+                sp.GetRequiredService<CredentialService>(),
+                sp.GetRequiredService<IUserLogService>()));
 }

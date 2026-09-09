@@ -30,4 +30,8 @@ public class CredentialService : ICredentialService
         var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
         return result == PasswordVerificationResult.Failed ? null : user;
     }
+
+    // Nothing to revoke while tokens are stateless; the audit entry (AuditingCredentialService) is the
+    // whole effect of signing out today.
+    public Task SignOutAsync(long userId) => Task.CompletedTask;
 }
