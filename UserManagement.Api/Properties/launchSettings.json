@@ -2,11 +2,13 @@
   "profiles": {
     "UserManagement.Api": {
       "commandName": "Project",
+      "dotnetRunMessages": true,
       "launchBrowser": true,
+      "launchUrl": "scalar",
+      "applicationUrl": "https://localhost:7085;http://localhost:5085",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
-      },
-      "applicationUrl": "https://localhost:56579;http://localhost:56580"
+      }
     }
   }
 }
