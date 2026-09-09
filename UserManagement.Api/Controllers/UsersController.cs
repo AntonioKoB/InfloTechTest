@@ -59,8 +59,7 @@ public class UsersController : ControllerBase
         }
         catch (EmailAlreadyExistsException ex)
         {
-            ModelState.AddModelError(nameof(CreateUserRequest.Email), ex.Message);
-            return ValidationProblem(ModelState);
+            return EmailConflict(ex);
         }
 
         return CreatedAtAction(nameof(GetById), new { id = user.Id }, user.ToDto());
@@ -80,8 +79,7 @@ public class UsersController : ControllerBase
         }
         catch (EmailAlreadyExistsException ex)
         {
-            ModelState.AddModelError(nameof(UpdateUserRequest.Email), ex.Message);
-            return ValidationProblem(ModelState);
+            return EmailConflict(ex);
         }
         catch (UserNoLongerExistsException)
         {
@@ -96,5 +94,11 @@ public class UsersController : ControllerBase
     {
         await _userService.DeleteAsync(id);
         return NoContent();
+    }
+
+    private ActionResult EmailConflict(EmailAlreadyExistsException ex)
+    {
+        ModelState.AddModelError(nameof(UserDto.Email), ex.Message);
+        return ValidationProblem(ModelState);
     }
 }

@@ -1,11 +1,13 @@
 using UserManagement.Api.Contracts.Logs;
 using UserManagement.Services.Domain;
+using DomainAction = UserManagement.Models.UserLogAction;
+using DomainLog = UserManagement.Models.UserLog;
 
 namespace UserManagement.Api.Mapping;
 
 public static class UserLogMappingExtensions
 {
-    public static UserLogDto ToDto(this UserManagement.Models.UserLog log, IReadOnlyList<FieldChange>? changes = null) => new()
+    public static UserLogDto ToDto(this DomainLog log, IReadOnlyList<FieldChange>? changes = null) => new()
     {
         Id = log.Id,
         UserId = log.UserId,
@@ -21,12 +23,12 @@ public static class UserLogMappingExtensions
         NewValue = change.NewValue
     };
 
-    private static UserLogAction ToContractAction(UserManagement.Models.UserLogAction action) => action switch
+    private static UserLogAction ToContractAction(DomainAction action) => action switch
     {
-        UserManagement.Models.UserLogAction.Created => UserLogAction.Created,
-        UserManagement.Models.UserLogAction.Viewed => UserLogAction.Viewed,
-        UserManagement.Models.UserLogAction.Updated => UserLogAction.Updated,
-        UserManagement.Models.UserLogAction.Deleted => UserLogAction.Deleted,
+        DomainAction.Created => UserLogAction.Created,
+        DomainAction.Viewed => UserLogAction.Viewed,
+        DomainAction.Updated => UserLogAction.Updated,
+        DomainAction.Deleted => UserLogAction.Deleted,
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, null)
     };
 }
