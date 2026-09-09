@@ -31,6 +31,14 @@ public interface IDataContext
     Task<TEntity?> FirstOrDefaultAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class;
 
     /// <summary>
+    /// Get all items matching the given predicate, without loading the rest of the table into memory
+    /// </summary>
+    /// <typeparam name="TEntity"></typeparam>
+    /// <param name="predicate"></param>
+    /// <returns></returns>
+    Task<IEnumerable<TEntity>> WhereAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class;
+
+    /// <summary>
     /// Get a page of items, ordered by the given key, without loading the rest of the table into memory
     /// </summary>
     /// <typeparam name="TEntity"></typeparam>
@@ -72,4 +80,13 @@ public interface IDataContext
     /// <param name="entity"></param>
     /// <returns></returns>
     Task DeleteAsync<TEntity>(TEntity entity) where TEntity : class;
+
+    /// <summary>
+    /// Delete all items matching the given predicate. Idempotent: if nothing matches, this is a no-op
+    /// and does not throw.
+    /// </summary>
+    /// <typeparam name="TEntity"></typeparam>
+    /// <param name="predicate"></param>
+    /// <returns></returns>
+    Task DeleteWhereAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class;
 }

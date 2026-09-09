@@ -18,8 +18,8 @@ public class UserService : IUserService
     /// </summary>
     /// <param name="isActive"></param>
     /// <returns></returns>
-    public async Task<IEnumerable<User>> FilterByActiveAsync(bool isActive)
-        => (await _dataAccess.GetAllAsync<User>()).Where(u => u.IsActive == isActive);
+    public Task<IEnumerable<User>> FilterByActiveAsync(bool isActive)
+        => _dataAccess.WhereAsync<User>(u => u.IsActive == isActive);
 
     public Task<IEnumerable<User>> GetAllAsync() => _dataAccess.GetAllAsync<User>();
 
@@ -50,12 +50,6 @@ public class UserService : IUserService
         await _dataAccess.UpdateAsync(user);
     }
 
-    public async Task DeleteAsync(long id)
-    {
-        var user = await GetByIdAsync(id);
-        if (user is not null)
-        {
-            await _dataAccess.DeleteAsync(user);
-        }
-    }
+    public Task DeleteAsync(long id)
+        => _dataAccess.DeleteWhereAsync<User>(u => u.Id == id);
 }

@@ -65,6 +65,9 @@ public class DataContext : DbContext, IDataContext
     public async Task<TEntity?> FirstOrDefaultAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class
         => await base.Set<TEntity>().AsNoTracking().FirstOrDefaultAsync(predicate);
 
+    public async Task<IEnumerable<TEntity>> WhereAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class
+        => await base.Set<TEntity>().AsNoTracking().Where(predicate).ToListAsync();
+
     public async Task<IReadOnlyList<TEntity>> GetPageAsync<TEntity, TKey>(Expression<Func<TEntity, TKey>> orderBy, bool descending, int skip, int take) where TEntity : class
     {
         var query = base.Set<TEntity>().AsNoTracking();
@@ -83,6 +86,9 @@ public class DataContext : DbContext, IDataContext
 
     public Task DeleteAsync<TEntity>(TEntity entity) where TEntity : class
         => PersistAsync(() => base.Remove(entity));
+
+    public Task DeleteWhereAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class
+        => base.Set<TEntity>().Where(predicate).ExecuteDeleteAsync();
 
     private async Task PersistAsync(Action trackerOperation)
     {
