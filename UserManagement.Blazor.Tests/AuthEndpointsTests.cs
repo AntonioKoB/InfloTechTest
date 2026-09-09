@@ -1,0 +1,136 @@
+using System;
+using System.Net;
+using System.Net.Http;
+using System.Reflection;
+using System.Security.Claims;
+using System.Text;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.Extensions.DependencyInjection;
+using Refit;
+using UserManagement.Api.Contracts.Auth;
+using UserManagement.Blazor.Api;
+using UserManagement.Blazor.Auth;
+
+namespace UserManagement.Blazor.Tests;
+
+public class AuthEndpointsTests
+{
+    [Fact]
+    public async Task LoginAsync_WhenTheApiAcceptsTheCredentials_MustSignInWithTheTokenAndRedirectHome()
+    {
+        // Arrange
+        var response = SetupSuccessfulLogin();
+
+        // Act
+        var result = await AuthEndpoints.LoginAsync(CreateRequest(), _authApi.Object, CreateHttpContext());
+
+        // Assert
+        result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be("/");
+        _authenticationService.Verify(s => s.SignInAsync(
+            It.IsAny<HttpContext>(),
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            It.Is<ClaimsPrincipal>(p => p.FindFirst(AuthClaimTypes.AccessToken)!.Value == response.Token && p.Identity!.Name == response.DisplayName),
+            It.IsAny<AuthenticationProperties>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task LoginAsync_MustExpireTheCookieWhenTheTokenExpires()
+    {
+        // Arrange
+        // The cookie is only useful while the token inside it is accepted by the API, so the two lifetimes
+        // are tied together rather than letting the cookie outlive a token the API will reject.
+        var response = SetupSuccessfulLogin();
+        AuthenticationProperties? properties = null;
+        _authenticationService
+            .Setup(s => s.SignInAsync(It.IsAny<HttpContext>(), It.IsAny<string>(), It.IsAny<ClaimsPrincipal>(), It.IsAny<AuthenticationProperties>()))
+            .Callback<HttpContext, string?, ClaimsPrincipal, AuthenticationProperties?>((_, _, _, p) => properties = p)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await AuthEndpoints.LoginAsync(CreateRequest(), _authApi.Object, CreateHttpContext());
+
+        // Assert
+        properties.Should().NotBeNull();
+        properties!.ExpiresUtc.Should().Be(response.ExpiresAtUtc);
+    }
+
+    [Fact]
+    public async Task LoginAsync_WhenTheApiRejectsTheCredentials_MustRedirectBackToLoginWithAnErrorWithoutSigningIn()
+    {
+        // Arrange
+        _authApi.Setup(a => a.LoginAsync(It.IsAny<LoginRequest>())).ThrowsAsync(await CreateUnauthorizedException());
+
+        // Act
+        var result = await AuthEndpoints.LoginAsync(CreateRequest(), _authApi.Object, CreateHttpContext());
+
+        // Assert
+        result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be("/login?error=1");
+        _authenticationService.Verify(s => s.SignInAsync(It.IsAny<HttpContext>(), It.IsAny<string>(), It.IsAny<ClaimsPrincipal>(), It.IsAny<AuthenticationProperties>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LogoutAsync_MustSignOutAndRedirectToLogin()
+    {
+        // Act
+        var result = await AuthEndpoints.LogoutAsync(CreateHttpContext());
+
+        // Assert
+        result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be("/login");
+        _authenticationService.Verify(s => s.SignOutAsync(It.IsAny<HttpContext>(), CookieAuthenticationDefaults.AuthenticationScheme, It.IsAny<AuthenticationProperties?>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(nameof(AuthEndpoints.LoginAsync))]
+    [InlineData(nameof(AuthEndpoints.LogoutAsync))]
+    public void FormPostHandlers_MustRequireAnAntiforgeryToken(string handlerName)
+    {
+        // Arrange
+        // Both handlers change who the browser is signed in as, and both are plain form posts a third-party
+        // page could forge. Requiring the antiforgery token (issued to this app's own pages) closes that.
+        var handler = typeof(AuthEndpoints).GetMethod(handlerName)!;
+
+        // Act
+        var metadata = handler.GetCustomAttribute<RequireAntiforgeryTokenAttribute>();
+
+        // Assert
+        metadata.Should().NotBeNull($"{handlerName} must validate the antiforgery token");
+        metadata!.RequiresValidation.Should().BeTrue();
+    }
+
+    private LoginResponse SetupSuccessfulLogin()
+    {
+        var response = new LoginResponse
+        {
+            Token = "jwt-token",
+            ExpiresAtUtc = new DateTime(2026, 9, 9, 18, 0, 0, DateTimeKind.Utc),
+            DisplayName = "Peter Loew",
+            Email = "ploew@example.com"
+        };
+
+        _authApi.Setup(a => a.LoginAsync(It.IsAny<LoginRequest>())).ReturnsAsync(response);
+
+        return response;
+    }
+
+    private static LoginRequest CreateRequest() => new() { Email = "ploew@example.com", Password = "12345" };
+
+    private HttpContext CreateHttpContext() => new DefaultHttpContext
+    {
+        RequestServices = new ServiceCollection().AddSingleton(_authenticationService.Object).BuildServiceProvider()
+    };
+
+    private static async Task<ApiException> CreateUnauthorizedException()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://localhost/api/auth/login");
+        var response = new HttpResponseMessage(HttpStatusCode.Unauthorized) { Content = new StringContent("", Encoding.UTF8, "application/json") };
+        return await ApiException.Create(request, HttpMethod.Post, response, new RefitSettings());
+    }
+
+    private readonly Mock<IAuthApi> _authApi = new();
+    private readonly Mock<IAuthenticationService> _authenticationService = new();
+}
