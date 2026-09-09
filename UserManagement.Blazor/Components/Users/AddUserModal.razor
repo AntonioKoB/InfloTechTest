@@ -8,7 +8,13 @@
             </div>
             <EditForm Model="_model" OnValidSubmit="SaveAsync">
                 <DataAnnotationsValidator />
-                <UserFormFields Model="_model" />
+                <UserFormFields Model="_model">
+                    <MudItem xs="6">
+                        <label class="field-label" for="input-password">Password</label>
+                        <InputText id="input-password" type="password" autocomplete="new-password" @bind-Value="_model.Password" class="field-input" />
+                        <ValidationMessage For="() => _model.Password" />
+                    </MudItem>
+                </UserFormFields>
                 @if (_emailError is not null)
                 {
                     <MudText id="email-error" Color="Color.Error" Class="mt-2">@_emailError</MudText>

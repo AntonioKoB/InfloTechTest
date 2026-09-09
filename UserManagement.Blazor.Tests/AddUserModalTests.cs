@@ -107,12 +107,61 @@ public class AddUserModalTests : BunitContext
         wasSaved.Should().BeFalse();
     }
 
-    private static void FillForm(IRenderedComponent<AddUserModal> cut)
+    [Fact]
+    public void WhenVisible_MustShowAPasswordInput()
+    {
+        // Act
+        var cut = Render<AddUserModal>(p => p.Add(x => x.Visible, true));
+
+        // Assert
+        cut.Find("#input-password").GetAttribute("type").Should().Be("password");
+    }
+
+    [Fact]
+    public async Task ClickSave_MustSendThePasswordInTheCreateUserRequest()
+    {
+        // Arrange
+        CreateUserRequest? sentRequest = null;
+        _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>()))
+            .Callback<CreateUserRequest>(r => sentRequest = r)
+            .ReturnsAsync(new UserDto { Id = 5 });
+        var cut = Render<AddUserModal>(p => p.Add(x => x.Visible, true));
+        FillForm(cut, password: "12345");
+
+        // Act
+        await cut.InvokeAsync(() => cut.Find("#save-button").Click());
+
+        // Assert
+        sentRequest.Should().NotBeNull();
+        sentRequest!.Password.Should().Be("12345");
+    }
+
+    [Fact]
+    public async Task ClickSaveWithBlankPassword_MustNotCallCreateUserAsync()
+    {
+        // Arrange
+        // A new user cannot exist without a credential - the form must refuse to submit rather than let the
+        // API reject it after the round trip.
+        var cut = Render<AddUserModal>(p => p.Add(x => x.Visible, true));
+        FillForm(cut, password: null);
+
+        // Act
+        await cut.InvokeAsync(() => cut.Find("#save-button").Click());
+
+        // Assert
+        _usersApi.Verify(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>()), Times.Never);
+    }
+
+    private static void FillForm(IRenderedComponent<AddUserModal> cut, string? password = "12345")
     {
         cut.Find("#input-forename").Change("New");
         cut.Find("#input-surname").Change("User");
         cut.Find("#input-email").Change("new@example.com");
         cut.Find("#input-dob").Change("2000-01-01");
+        if (password is not null)
+        {
+            cut.Find("#input-password").Change(password);
+        }
     }
 
     private static async Task<ApiException> CreateEmailConflictException()

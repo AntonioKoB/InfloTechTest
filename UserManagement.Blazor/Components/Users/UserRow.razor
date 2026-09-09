@@ -18,7 +18,13 @@
             <MudDivider Class="my-3" />
             <EditForm Model="_editModel" OnValidSubmit="SaveAsync">
                 <DataAnnotationsValidator />
-                <UserFormFields Model="_editModel" />
+                <UserFormFields Model="_editModel">
+                    <MudItem xs="6">
+                        <label class="field-label" for="input-password">New password</label>
+                        <InputText id="input-password" type="password" autocomplete="new-password" @bind-Value="_editModel.Password" class="field-input" />
+                        <div class="field-hint">Leave blank to keep the current password</div>
+                    </MudItem>
+                </UserFormFields>
                 @if (_emailError is not null)
                 {
                     <MudText id="email-error" Color="Color.Error" Class="mt-2">@_emailError</MudText>

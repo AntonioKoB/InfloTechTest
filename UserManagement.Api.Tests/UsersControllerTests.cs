@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using UserManagement.Api.Contracts.Logs;
@@ -349,6 +350,87 @@ public class UsersControllerTests
     }
 
     [Fact]
+    public async Task Create_MustHashTheRequestPasswordOntoTheUserBeforePersisting()
+    {
+        // Arrange
+        // The API is the only place the clear-text password exists; it must be turned into a hash on the
+        // User (via ICredentialService) before the user is handed to the service to be saved, so the
+        // persisted row never carries the clear-text value.
+        var controller = CreateController();
+        var request = new CreateUserRequest
+        {
+            Forename = "Brand New",
+            Surname = "User",
+            Email = "brandnewuser@example.com",
+            DateOfBirth = new DateOnly(1995, 4, 12),
+            IsActive = true,
+            Password = "12345"
+        };
+        var passwordWasSetBeforePersisting = false;
+        _userService
+            .Setup(s => s.CreateAsync(It.IsAny<User>()))
+            .Callback(() => passwordWasSetBeforePersisting = _credentialService.Invocations.Any(i => i.Method.Name == nameof(ICredentialService.SetPassword)))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await controller.Create(request);
+
+        // Assert
+        _credentialService.Verify(c => c.SetPassword(It.Is<User>(u => u.Email == request.Email), "12345"), Times.Once);
+        passwordWasSetBeforePersisting.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Update_WhenPasswordSupplied_MustHashItOntoTheExistingUser()
+    {
+        // Arrange
+        var controller = CreateController();
+        SetupUser(id: 5, forename: "Existing");
+        var request = new UpdateUserRequest
+        {
+            Forename = "Updated",
+            Surname = "User",
+            Email = "updated@example.com",
+            DateOfBirth = new DateOnly(1995, 4, 12),
+            IsActive = true,
+            Password = "new-secret"
+        };
+
+        // Act
+        await controller.Update(5, request);
+
+        // Assert
+        _credentialService.Verify(c => c.SetPassword(It.Is<User>(u => u.Id == 5), "new-secret"), Times.Once);
+        _userService.Verify(s => s.UpdateAsync(It.Is<User>(u => u.Id == 5)), Times.Once);
+    }
+
+    [Fact]
+    public async Task Update_WhenPasswordNotSupplied_MustLeaveTheExistingPasswordUntouched()
+    {
+        // Arrange
+        // Editing a user's details must not silently reset their password - a blank password on Update
+        // means "keep the current one", so the credential service must not be involved at all.
+        var controller = CreateController();
+        SetupUser(id: 5, forename: "Existing");
+        var request = new UpdateUserRequest
+        {
+            Forename = "Updated",
+            Surname = "User",
+            Email = "updated@example.com",
+            DateOfBirth = new DateOnly(1995, 4, 12),
+            IsActive = true,
+            Password = null
+        };
+
+        // Act
+        await controller.Update(5, request);
+
+        // Assert
+        _credentialService.Verify(c => c.SetPassword(It.IsAny<User>(), It.IsAny<string>()), Times.Never);
+        _userService.Verify(s => s.UpdateAsync(It.Is<User>(u => u.Id == 5)), Times.Once);
+    }
+
+    [Fact]
     public async Task Delete_MustCallDeleteAsyncWithId()
     {
         // Arrange
@@ -453,5 +535,6 @@ public class UsersControllerTests
 
     private readonly Mock<IUserService> _userService = new();
     private readonly Mock<IUserLogService> _userLogService = new();
-    private UsersController CreateController() => new(_userService.Object, _userLogService.Object);
+    private readonly Mock<ICredentialService> _credentialService = new();
+    private UsersController CreateController() => new(_userService.Object, _userLogService.Object, _credentialService.Object);
 }

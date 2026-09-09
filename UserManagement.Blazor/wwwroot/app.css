@@ -83,6 +83,17 @@ h1:focus {
     accent-color: var(--mud-palette-primary, #594ae2);
 }
 
+.field-hint {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: rgba(0, 0, 0, 0.6);
+}
+
+.validation-message {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+}
+
 /* User rows and detail panels. Global for the same reason as the form fields above. */
 .user-avatar {
     display: flex;

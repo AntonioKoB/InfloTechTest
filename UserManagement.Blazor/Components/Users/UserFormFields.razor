@@ -2,19 +2,24 @@
     <MudItem xs="6">
         <label class="field-label" for="input-forename">Forename</label>
         <InputText id="input-forename" @bind-Value="Model.Forename" class="field-input" />
+        <ValidationMessage For="() => Model.Forename" />
     </MudItem>
     <MudItem xs="6">
         <label class="field-label" for="input-surname">Surname</label>
         <InputText id="input-surname" @bind-Value="Model.Surname" class="field-input" />
+        <ValidationMessage For="() => Model.Surname" />
     </MudItem>
     <MudItem xs="6">
         <label class="field-label" for="input-email">Email</label>
         <InputText id="input-email" @bind-Value="Model.Email" class="field-input" />
+        <ValidationMessage For="() => Model.Email" />
     </MudItem>
     <MudItem xs="6">
         <label class="field-label" for="input-dob">Date of Birth</label>
         <InputDate id="input-dob" @bind-Value="Model.DateOfBirth" class="field-input" />
+        <ValidationMessage For="() => Model.DateOfBirth" />
     </MudItem>
+    @ChildContent
     <MudItem xs="12">
         <label class="field-label field-label-inline" for="input-active">Active</label>
         <InputCheckbox id="input-active" @bind-Value="Model.IsActive" class="field-checkbox" />

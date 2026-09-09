@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using UserManagement.Data.Exceptions;
 using UserManagement.Models;
@@ -367,6 +368,27 @@ public class DataContextTests
         // Assert: Verifies that the action of the method under test behaves as expected.
         result.Should().Be(before + 2);
     }
+
+    [Fact]
+    public async Task SeededUsers_MustAllHaveAPasswordHashThatVerifiesAgainstTheDocumentedSeedPassword()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Login is "based on the users being stored", so the seeded users need a credential too - the
+        // documented seed password (see README) lets a reviewer sign in as any of them straight away. It is
+        // stored only as a PasswordHasher hash: never the clear-text value, and never empty.
+        var context = CreateContext();
+        var hasher = new PasswordHasher<User>();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var users = await context.GetAllAsync<User>();
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        users.Should().NotBeEmpty();
+        users.Should().OnlyContain(u => !string.IsNullOrEmpty(u.PasswordHash) && u.PasswordHash != SeedPassword);
+        users.Should().OnlyContain(u => hasher.VerifyHashedPassword(u, u.PasswordHash!, SeedPassword) == PasswordVerificationResult.Success);
+    }
+
+    private const string SeedPassword = "12345";
 
     private DataContext CreateContext(string? databaseName = null)
     {

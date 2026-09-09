@@ -154,6 +154,62 @@ public class UserRowTests : BunitContext
     }
 
     [Fact]
+    public async Task EditMode_PasswordInputStartsBlank_AndSavingWithoutTypingOneMustSendNullPassword()
+    {
+        // Arrange
+        // The stored hash is never shown or pre-filled. Leaving the field blank means "keep the current
+        // password", which the API expects as a null Password on the update request.
+        var user = SetupUser();
+        _usersApi.Setup(a => a.GetUserByIdAsync(user.Id, true)).ReturnsAsync(user);
+        _usersApi.Setup(a => a.GetUserLogsAsync(user.Id)).ReturnsAsync([]);
+        UpdateUserRequest? sentRequest = null;
+        _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>()))
+            .Callback<long, UpdateUserRequest>((_, r) => sentRequest = r)
+            .ReturnsAsync(user);
+        var cut = Render<UserRow>(p => p
+            .Add(x => x.RowKey, Guid.NewGuid())
+            .Add(x => x.User, user));
+        cut.Find("#row-header").Click();
+        cut.Find("#edit-button").Click();
+        var passwordInput = cut.Find("#input-password");
+        passwordInput.GetAttribute("type").Should().Be("password");
+        passwordInput.GetAttribute("value").Should().BeNullOrEmpty();
+
+        // Act
+        await cut.InvokeAsync(() => cut.Find("#save-button").Click());
+
+        // Assert
+        sentRequest.Should().NotBeNull();
+        sentRequest!.Password.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task EditMode_ClickSaveAfterTypingANewPassword_MustSendItInTheUpdateUserRequest()
+    {
+        // Arrange
+        var user = SetupUser();
+        _usersApi.Setup(a => a.GetUserByIdAsync(user.Id, true)).ReturnsAsync(user);
+        _usersApi.Setup(a => a.GetUserLogsAsync(user.Id)).ReturnsAsync([]);
+        UpdateUserRequest? sentRequest = null;
+        _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>()))
+            .Callback<long, UpdateUserRequest>((_, r) => sentRequest = r)
+            .ReturnsAsync(user);
+        var cut = Render<UserRow>(p => p
+            .Add(x => x.RowKey, Guid.NewGuid())
+            .Add(x => x.User, user));
+        cut.Find("#row-header").Click();
+        cut.Find("#edit-button").Click();
+        cut.Find("#input-password").Change("new-secret");
+
+        // Act
+        await cut.InvokeAsync(() => cut.Find("#save-button").Click());
+
+        // Assert
+        sentRequest.Should().NotBeNull();
+        sentRequest!.Password.Should().Be("new-secret");
+    }
+
+    [Fact]
     public async Task EditMode_ClickSave_MustShowSuccessSnackbar()
     {
         // Arrange

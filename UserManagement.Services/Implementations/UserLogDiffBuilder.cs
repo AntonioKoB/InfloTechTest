@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using UserManagement.Models;
 using UserManagement.Services.Domain;
 using UserManagement.Services.Domain.Interfaces;
@@ -20,7 +21,11 @@ public class UserLogDiffBuilder : IUserLogDiffBuilder
         var before = log.BeforeJson is null ? null : JsonSerializer.Deserialize<User>(log.BeforeJson);
         var after = log.AfterJson is null ? null : JsonSerializer.Deserialize<User>(log.AfterJson);
 
-        var properties = typeof(User).GetProperties().Where(p => p.Name != nameof(User.Id));
+        // Id is identity, not a business field. Anything [JsonIgnore]d is excluded from the snapshots by
+        // definition (the credential hash being the case in point), so there is nothing to diff - and it
+        // must never be surfaced on screen regardless.
+        var properties = typeof(User).GetProperties()
+            .Where(p => p.Name != nameof(User.Id) && !p.IsDefined(typeof(JsonIgnoreAttribute), inherit: true));
 
         var changes = new List<FieldChange>();
         foreach (var property in properties)

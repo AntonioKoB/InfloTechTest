@@ -138,11 +138,13 @@ Once set, start the API (see [Running the application](#running-the-application)
 
 ### 4. Adding future migrations
 
-If the `User`/`UserLog` model changes, generate a new migration from the repository root:
+If the `User`/`UserLog` model changes, generate a new migration from the repository root (requires the `dotnet-ef` tool: `dotnet tool install --global dotnet-ef`):
 
 ```bash
-dotnet ef migrations add <MigrationName> --project UserManagement.Data --startup-project UserManagement.Api
+dotnet ef migrations add <MigrationName> --project UserManagement.Data
 ```
+
+No `--startup-project` is needed: `UserManagement.Data` carries the EF Core design-time package and a design-time factory (`DataContextFactory`), so the tooling builds the model from the data project alone and the API's startup code - including its `Database.Migrate()` call - never runs during scaffolding.
 
 Commit the generated files under `UserManagement.Data/Migrations` - they're applied automatically the next time the app starts, no separate `database update` step needed.
 
@@ -179,9 +181,17 @@ Note that the API boundary is real regardless of this choice: the Blazor app dep
 
 A few styles that apply to markup rendered by MudBlazor or the built-in input components live in `wwwroot/app.css` rather than in component-scoped `.razor.css` files. Blazor's CSS isolation only tags elements written directly in a component's own markup, so scoped rules never reach elements a child component renders.
 
+### Credentials
+
+Every user has a password, stored only as a hash (`User.PasswordHash`) produced by ASP.NET Core's own `PasswordHasher<TUser>` (PBKDF2 with a per-password salt, from the `Microsoft.Extensions.Identity.Core` package - just the hashing primitive, not the Identity framework's user store, registration or lockout machinery). The clear-text password exists only in the create/update request to the API: it is never stored, never returned in a `UserDto`, and never written to the audit log - `PasswordHash` is `[JsonIgnore]`d, so the before/after snapshots and the diff never contain it (a password change shows as an "Updated" entry with no field changes).
+
+- **Add user** requires a password. **Edit user** has an optional "New password" field - leave it blank to keep the current one.
+- **Seeded users** all share the password `12345`. The `AddUserPasswordHash` migration sets it on the existing seed rows, so any of them can be used to sign in once login is in place. A user created before that migration has no credential (`NULL`) until one is set through Edit.
+- `ICredentialService` in the Services layer owns hashing and verification. `AuthenticateAsync` returns the user only for a matching email and password on an active user with a credential set; an unknown email, wrong password, inactive user or missing credential all yield `null`.
+
 ### Authentication
 
-Not implemented. When it is added, the intended approach is a token issued on login and attached to the API calls, with the token held server-side by the Blazor app rather than in the browser.
+Not implemented yet. When it is added, the intended approach is a token issued on login and attached to the API calls, with the token held server-side by the Blazor app rather than in the browser.
 
 ## Static assets
 

@@ -12,11 +12,13 @@ public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
     private readonly IUserLogService _userLogService;
+    private readonly ICredentialService _credentialService;
 
-    public UsersController(IUserService userService, IUserLogService userLogService)
+    public UsersController(IUserService userService, IUserLogService userLogService, ICredentialService credentialService)
     {
         _userService = userService;
         _userLogService = userLogService;
+        _credentialService = credentialService;
     }
 
     [HttpGet]
@@ -52,6 +54,7 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<UserDto>> Create(CreateUserRequest request)
     {
         var user = request.ToUser();
+        _credentialService.SetPassword(user, request.Password);
 
         try
         {
@@ -72,6 +75,10 @@ public class UsersController : ControllerBase
         if (user is null) return NotFound();
 
         request.ApplyTo(user);
+        if (!string.IsNullOrEmpty(request.Password))
+        {
+            _credentialService.SetPassword(user, request.Password);
+        }
 
         try
         {

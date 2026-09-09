@@ -101,5 +101,40 @@ public class UserLogDiffBuilderTests
         result.Should().BeEmpty();
     }
 
+    [Fact]
+    public void Build_WhenOnlyThePasswordHashDiffers_MustReturnNoChanges()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // A password change is a real update (it is still recorded as one), but the diff must never surface
+        // the credential itself - neither the old hash nor the new one belongs on screen.
+        var builder = CreateBuilder();
+        var before = new User { Id = 1, Forename = "Same", Surname = "User", Email = "same@example.com", IsActive = true, DateOfBirth = new DateOnly(1990, 1, 1), PasswordHash = "hash-before" };
+        var after = new User { Id = 1, Forename = "Same", Surname = "User", Email = "same@example.com", IsActive = true, DateOfBirth = new DateOnly(1990, 1, 1), PasswordHash = "hash-after" };
+        var log = new UserLog { UserId = 1, Action = UserLogAction.Updated, Timestamp = DateTime.UtcNow, BeforeJson = JsonSerializer.Serialize(before), AfterJson = JsonSerializer.Serialize(after) };
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = builder.Build(log);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Build_MustNeverIncludePasswordHashEvenWhenOnlyOneSnapshotExists()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Same shape as the Id case above: with a single snapshot there is no "unchanged" comparison to hide
+        // behind, so the exclusion has to be explicit rather than a side effect of the skip-if-equal rule.
+        var builder = CreateBuilder();
+        var after = new User { Id = 1, Forename = "Brand New", Surname = "User", Email = "brandnewuser@example.com", IsActive = true, DateOfBirth = new DateOnly(1995, 4, 12), PasswordHash = "hash-after" };
+        var log = new UserLog { UserId = 1, Action = UserLogAction.Created, Timestamp = DateTime.UtcNow, BeforeJson = null, AfterJson = JsonSerializer.Serialize(after) };
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = builder.Build(log);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().NotContain(c => c.PropertyName == nameof(User.PasswordHash));
+    }
+
     private static UserLogDiffBuilder CreateBuilder() => new();
 }
