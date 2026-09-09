@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
+using UserManagement.Data.Exceptions;
 using UserManagement.Models;
 using UserManagement.Services.Domain.Exceptions;
 using UserManagement.Services.Domain.Implementations;
@@ -196,6 +197,29 @@ public class UserServiceTests
 
         // Assert: Verifies that the action of the method under test behaves as expected.
         _dataContext.Verify(s => s.UpdateAsync(user), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenDataContextThrowsConcurrencyConflict_MustThrowUserNoLongerExistsException()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Translates the data layer's ConcurrencyConflictException (raised when the row was deleted by
+        // another request since being fetched) into a Services-layer exception, so callers of IUserService
+        // never need to reference the data layer's exception types directly.
+        var service = CreateService();
+        _dataContext
+            .Setup(s => s.FirstOrDefaultAsync<User>(It.IsAny<Expression<Func<User, bool>>>()))
+            .ReturnsAsync((User?)null);
+        _dataContext
+            .Setup(s => s.UpdateAsync(It.IsAny<User>()))
+            .ThrowsAsync(new ConcurrencyConflictException("gone", new Exception()));
+        var user = new User { Id = 5, Forename = "Updated", Surname = "User", Email = "updated@example.com", DateOfBirth = new DateOnly(1990, 1, 1) };
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var act = () => service.UpdateAsync(user);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        await act.Should().ThrowAsync<UserNoLongerExistsException>();
     }
 
     [Fact]

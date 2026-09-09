@@ -107,6 +107,10 @@ public class UsersController : Controller
             ModelState.AddModelError(nameof(UserFormViewModel.Email), "A user with this email already exists.");
             return View("UserForm", model);
         }
+        catch (UserNoLongerExistsException)
+        {
+            return View("UserNotFound", id);
+        }
 
         return RedirectToAction(nameof(List));
     }

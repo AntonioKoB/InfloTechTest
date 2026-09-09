@@ -5,6 +5,7 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using UserManagement.Data.Exceptions;
 using UserManagement.Models;
 
 namespace UserManagement.Data;
@@ -90,6 +91,17 @@ public class DataContext : DbContext, IDataContext
     private async Task PersistAsync(Action trackerOperation)
     {
         trackerOperation();
-        await SaveChangesAsync();
+
+        try
+        {
+            await SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            // EF Core throws this when the affected-row-count doesn't match what it expected - most
+            // commonly, the row was deleted by someone else between being fetched and being saved. Wrapped
+            // so callers don't need to reference EF Core directly to handle it.
+            throw new ConcurrencyConflictException("The entity being saved no longer exists - it may have been deleted by another request.", ex);
+        }
     }
 }

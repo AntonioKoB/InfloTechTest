@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using UserManagement.Data.Exceptions;
 using UserManagement.Models;
 
 namespace UserManagement.Data.Tests;
@@ -211,6 +212,33 @@ public class DataContextTests
     }
 
     [Fact]
+    public async Task UpdateAsync_WhenEntityWasDeletedByAnotherRequestSinceBeingFetched_MustThrowConcurrencyConflictException()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Simulates two concurrent requests via two separate DataContext instances sharing the same
+        // underlying database: contextA fetches and mutates a user but hasn't saved yet, while contextB
+        // deletes that same row and saves first. EF Core's own optimistic-concurrency check (the UPDATE
+        // affects 0 rows instead of the expected 1) then surfaces as this app's own
+        // ConcurrencyConflictException, not a raw EF exception leaking out of the data layer.
+        var databaseName = Guid.NewGuid().ToString();
+        var contextA = CreateContext(databaseName);
+        var contextB = CreateContext(databaseName);
+
+        var trackedByA = await contextA.GetByIdAsync<User>(1L);
+        trackedByA!.Forename = "Changed By A";
+
+        var trackedByB = await contextB.GetByIdAsync<User>(1L);
+        contextB.Remove(trackedByB!);
+        await contextB.SaveChangesAsync();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var act = () => contextA.UpdateAsync(trackedByA);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        await act.Should().ThrowAsync<ConcurrencyConflictException>();
+    }
+
+    [Fact]
     public async Task GetAllAsync_WhenUpdated_MustReflectUpdatedEntity()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
@@ -340,10 +368,10 @@ public class DataContextTests
         result.Should().Be(before + 2);
     }
 
-    private DataContext CreateContext()
+    private DataContext CreateContext(string? databaseName = null)
     {
         var context = new DataContext(
-            new DbContextOptionsBuilder<DataContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+            new DbContextOptionsBuilder<DataContext>().UseInMemoryDatabase(databaseName ?? Guid.NewGuid().ToString()).Options);
 
         // The InMemory provider only applies OnModelCreating's HasData seed rows once the database is
         // actually created - unlike the real SQL Server app, which gets its schema/seed data from

@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 using UserManagement.Data;
+using UserManagement.Data.Exceptions;
 using UserManagement.Models;
 using UserManagement.Services.Domain.Exceptions;
 using UserManagement.Services.Domain.Interfaces;
@@ -46,7 +47,14 @@ public class UserService : IUserService
             throw new EmailAlreadyExistsException(user.Email);
         }
 
-        await _dataAccess.UpdateAsync(user);
+        try
+        {
+            await _dataAccess.UpdateAsync(user);
+        }
+        catch (ConcurrencyConflictException)
+        {
+            throw new UserNoLongerExistsException(user.Id);
+        }
     }
 
     public Task DeleteAsync(long id)

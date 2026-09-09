@@ -71,6 +71,7 @@ public interface IDataContext
     /// <typeparam name="TEntity"></typeparam>
     /// <param name="entity"></param>
     /// <returns></returns>
+    /// <exception cref="Exceptions.ConcurrencyConflictException">The entity no longer exists - e.g. it was deleted by another request since being fetched.</exception>
     Task UpdateAsync<TEntity>(TEntity entity) where TEntity : class;
 
     /// <summary>
