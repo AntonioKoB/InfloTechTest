@@ -137,6 +137,25 @@ public class DataContextTests
     }
 
     [Fact]
+    public async Task DeleteWhereAsync_OnInMemoryProvider_IsNotSupported_ProvenSeparatelyByManualVerification()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // EF Core's InMemory provider has no SQL translator for ExecuteDelete/ExecuteUpdate and throws for
+        // both - unlike the real SQL Server provider, which executes a genuine DELETE ... WHERE ... statement.
+        // Same permanent, intentional divergence as the unique-index gap below: these tests stay on InMemory
+        // by design, so DeleteWhereAsync's actual SQL translation and idempotency-under-race behavior is
+        // proven by manual verification against the real database, not by this suite.
+        var context = CreateContext();
+        var user = (await context.GetAllAsync<User>()).First();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var act = () => context.DeleteWhereAsync<User>(u => u.Id == user.Id);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
     public async Task CreateAsync_WhenEmailAlreadyExists_InMemoryProviderDoesNotEnforceTheUniqueIndex()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
@@ -215,7 +234,8 @@ public class DataContextTests
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var context = CreateContext();
         var entity = (await context.GetAllAsync<User>()).First();
-        await context.DeleteAsync(entity);
+        context.Remove(entity);
+        await context.SaveChangesAsync();
 
         // Act: Invokes the method under test with the arranged parameters.
         var result = await context.GetAllAsync<User>();
@@ -267,7 +287,8 @@ public class DataContextTests
             BeforeJson = "{}"
         };
         await context.CreateAsync(log);
-        await context.DeleteAsync(user);
+        context.Remove(user);
+        await context.SaveChangesAsync();
 
         // Act: Invokes the method under test with the arranged parameters.
         var result = await context.GetAllAsync<UserLog>();

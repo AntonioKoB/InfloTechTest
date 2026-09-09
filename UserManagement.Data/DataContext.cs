@@ -84,9 +84,6 @@ public class DataContext : DbContext, IDataContext
     public Task UpdateAsync<TEntity>(TEntity entity) where TEntity : class
         => PersistAsync(() => base.Update(entity));
 
-    public Task DeleteAsync<TEntity>(TEntity entity) where TEntity : class
-        => PersistAsync(() => base.Remove(entity));
-
     public Task DeleteWhereAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class
         => base.Set<TEntity>().Where(predicate).ExecuteDeleteAsync();
 

@@ -74,14 +74,6 @@ public interface IDataContext
     Task UpdateAsync<TEntity>(TEntity entity) where TEntity : class;
 
     /// <summary>
-    /// Delete an existing item matching the ID
-    /// </summary>
-    /// <typeparam name="TEntity"></typeparam>
-    /// <param name="entity"></param>
-    /// <returns></returns>
-    Task DeleteAsync<TEntity>(TEntity entity) where TEntity : class;
-
-    /// <summary>
     /// Delete all items matching the given predicate. Idempotent: if nothing matches, this is a no-op
     /// and does not throw.
     /// </summary>
