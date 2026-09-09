@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Scalar.AspNetCore;
 using UserManagement.Api.Auth;
+using UserManagement.Api.Health;
 using UserManagement.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,7 +13,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services
     .AddDataAccess(builder.Configuration)
     .AddDomainServices()
-    .AddJwtAuthentication(builder.Configuration, builder.Environment);
+    .AddJwtAuthentication(builder.Configuration, builder.Environment)
+    .AddApiHealthChecks();
 
 builder.Services
     .AddControllers()
@@ -41,5 +43,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Anonymous on purpose: health probes carry no token. See HealthCheckExtensions for what it checks.
+app.MapHealthChecks("/health").AllowAnonymous();
 
 app.Run();

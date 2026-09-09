@@ -150,7 +150,7 @@ Commit the generated files under `UserManagement.Data/Migrations` - they're appl
 
 ### 5. Production (Azure)
 
-Azure SQL is the intended production target - it's the same `Microsoft.EntityFrameworkCore.SqlServer` provider, so only the connection string changes, not the code. .NET User Secrets is a local-development-only mechanism (it's only loaded when `ASPNETCORE_ENVIRONMENT=Development`), so it plays no role in production. In Azure App Service, the equivalent is setting each value as an App Service Configuration entry - these surface to the app as environment variables, which ASP.NET Core's configuration system already reads automatically, so no code change is required. For stronger secret management (centralized rotation, RBAC-audited access) Azure Key Vault with a Managed Identity is a natural next step once a real deployment pipeline exists to attach it to.
+Azure SQL is the intended production target - it's the same `Microsoft.EntityFrameworkCore.SqlServer` provider, so only the connection string changes, not the code. .NET User Secrets is a local-development-only mechanism (it's only loaded when `ASPNETCORE_ENVIRONMENT=Development`), so it plays no role in production. In Azure App Service, the equivalent is setting each value as an App Service Configuration entry - these surface to the app as environment variables, which ASP.NET Core's configuration system already reads automatically, so no code change is required. For stronger secret management (centralized rotation, RBAC-audited access) Azure Key Vault with a Managed Identity is a natural next step once a real deployment pipeline exists to attach it to. The [Resiliency](#resiliency) section covers the two things an App Service deployment leans on beyond configuration: transient-fault retries against Azure SQL, and the `/health` endpoints for the platform's health probes.
 
 Everything each app needs beyond its committed `appsettings.json`:
 
@@ -238,10 +238,39 @@ On the API, `UsersController` and `LogsController` carry `[Authorize]` and `Auth
 
 `POST /api/auth/login` with `{ "email": "...", "password": "..." }` returns the token, its expiry and the user's display name; send the token as `Authorization: Bearer <token>` on every other request.
 
+#### Next steps
+
+Deliberate omissions, kept out to hold the scope to what the exercise asks for. Each is a small, self-contained change:
+
+- **Token revocation.** Tokens are stateless and stay valid until they expire. `ICredentialService.SignOutAsync` is the hook where a revocation list (or a shorter lifetime plus refresh tokens) would go; today it only records the audit entry.
+- **Hash upgrades on sign-in.** `PasswordHasher` reports `SuccessRehashNeeded` when a stored hash uses an older format or work factor; the result is accepted, but the hash is not rewritten.
+- **A "Password changed" audit label.** A password-only edit is recorded as an Updated entry with an empty diff, because the hash is never part of the snapshots. A dedicated action would make it readable in the log.
+- **An OpenAPI bearer security scheme**, so Scalar's "try it" can attach a token instead of only documenting the endpoints.
+- **A password policy.** The only rule is that a password is required; the seeded accounts use `12345` by design.
+
 ## Static assets
 
-`LigerShark.WebOptimizer.Core` bundled and minified the MVC application's Bootstrap and jQuery assets, and was removed along with that project. The Blazor app does not need an equivalent: its build pipeline already fingerprints and compresses static web assets, MudBlazor ships a single pre-minified CSS and JS file each, and Blazor's CSS isolation bundles all component-scoped styles into one generated stylesheet. There is no separate bundling step to configure.
+`LigerShark.WebOptimizer.Core` bundled and minified the MVC application's Bootstrap and jQuery assets, and was removed along with that project. The Blazor app does not need an equivalent. `app.MapStaticAssets()` in `UserManagement.Blazor/Program.cs` serves the static web assets the build has already fingerprinted and precompressed, and `App.razor` references them through `@Assets["..."]`, so each URL carries its content hash and can be cached indefinitely. MudBlazor ships a single pre-minified CSS and JS file each, and Blazor's CSS isolation bundles every component-scoped `.razor.css` into one generated `UserManagement.Blazor.styles.css`. The only hand-written stylesheet, `wwwroot/app.css`, is served compressed but not minified - it is one small file, so a minifier would be a build step for nothing. There is no separate bundling step to configure.
 
-## API client resiliency (Blazor)
+## Resiliency
 
-The Blazor app's calls to `UserManagement.Api` (via the `IUsersApi`/`ILogsApi` Refit clients) go through [`Microsoft.Extensions.Http.Resilience`](https://learn.microsoft.com/dotnet/core/resilience/http-resilience) - Microsoft's own resilience package, built on [Polly](https://github.com/App-vNext/Polly) v8. It's wired in `UserManagement.Blazor/Program.cs` via `.AddStandardResilienceHandler()` on each `HttpClient`, which bundles retry (with exponential backoff), a per-attempt and total-request timeout, a circuit breaker, and a concurrency rate limiter in one call, rather than hand-wiring individual Polly policies.
+### API client (Blazor)
+
+The Blazor app's calls to `UserManagement.Api` (via the `IAuthApi`, `IUsersApi` and `ILogsApi` Refit clients) go through [`Microsoft.Extensions.Http.Resilience`](https://learn.microsoft.com/dotnet/core/resilience/http-resilience) - Microsoft's own resilience package, built on [Polly](https://github.com/App-vNext/Polly) v8. It's wired in `UserManagement.Blazor/Program.cs` via `.AddStandardResilienceHandler()` on each `HttpClient`, which bundles retry (with exponential backoff), a per-attempt and total-request timeout, a circuit breaker, and a concurrency rate limiter in one call, rather than hand-wiring individual Polly policies.
+
+### API to database
+
+The API's SQL Server provider is registered with `EnableRetryOnFailure` (`AddDataAccess`, in `UserManagement.Data`), which runs every query and `SaveChanges` under EF Core's retrying execution strategy. It retries only the error numbers the provider classifies as transient - the throttling, failover and dropped-connection faults a hosted database such as Azure SQL is documented to raise - and never a genuine failure like a constraint violation. The budget is three retries with an exponential backoff capped at five seconds, roughly nine seconds worst case, chosen to sit inside the Blazor client's ten-second per-attempt timeout: the client already retries, so the API giving up quickly on a request avoids both layers retrying on top of each other. The startup `Database.Migrate()` call runs under the same strategy, so a database that is still waking up when the API starts is retried rather than crashing the process. Nothing in the data layer opens a user-initiated transaction, so no `CreateExecutionStrategy().ExecuteAsync(...)` wrapping is required.
+
+There is deliberately no circuit breaker between the API and the database. A breaker earns its place where there is somewhere else to send the traffic, or a cheaper failure to fall back to - the Blazor app's breaker fails fast to an error message instead of hanging a circuit. In front of the only database there is no fallback: a breaker would turn a slow database into a hard outage for the duration of the break, which is worse than a bounded retry.
+
+For Azure SQL specifically, EF Core also offers `UseAzureSql()` in place of `UseSqlServer()`; it supersedes the now-obsolete `UseAzureSqlDefaults`, whose defaults are documented as "including retries on errors". Switching is a one-line change in `AddDataAccess` once the deployment target is confirmed as Azure SQL.
+
+### Health checks
+
+Both hosts expose `GET /health` for the platform's health probes (App Service's Health check feature, a load balancer, a container orchestrator). The endpoints are anonymous on purpose - probes carry no token - and return plain text: `Healthy` with a 200, or `Unhealthy` with a 503.
+
+- `UserManagement.Api` (`https://localhost:7085/health` locally) includes a database connectivity check (`AddDbContextCheck<DataContext>`), so a process that is up but cannot reach its database reports as down and can be taken out of rotation.
+- `UserManagement.Blazor` (`https://localhost:7086/health` locally) is a liveness check only. The host has no database of its own; its dependency on the API is already covered by the API's probe and by the client-side circuit breaker above.
+
+In App Service, set each site's Health check path to `/health`.
