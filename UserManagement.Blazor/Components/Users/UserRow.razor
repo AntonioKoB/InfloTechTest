@@ -1,7 +1,69 @@
+@using System.ComponentModel.DataAnnotations
+@using System.Linq
+@using System.Net
+@using Microsoft.AspNetCore.Mvc
+@using Refit
 @inject IUsersApi UsersApi
 @inject ISnackbar Snackbar
 
-<p>Not implemented</p>
+<div class="user-row">
+    @if (!IsNew)
+    {
+        <div id="row-header" @onclick="ToggleExpand" style="cursor:pointer">
+            @User.Id - @User.Forename @User.Surname
+        </div>
+    }
+
+    @if (IsNew || (_expanded && _editing))
+    {
+        <EditForm Model="_editModel" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div>
+                <label>Forename</label>
+                <InputText @bind-Value="_editModel.Forename" />
+            </div>
+            <div>
+                <label>Surname</label>
+                <InputText @bind-Value="_editModel.Surname" />
+            </div>
+            <div>
+                <label>Email</label>
+                <InputText @bind-Value="_editModel.Email" />
+            </div>
+            <div>
+                <label>Date of Birth</label>
+                <InputDate @bind-Value="_editModel.DateOfBirth" />
+            </div>
+            <div>
+                <label>Active</label>
+                <InputCheckbox @bind-Value="_editModel.IsActive" />
+            </div>
+            @if (_emailError is not null)
+            {
+                <MudText id="email-error" Color="Color.Error">@_emailError</MudText>
+            }
+            <MudButton id="save-button" ButtonType="ButtonType.Submit">Save</MudButton>
+            <MudButton id="cancel-button" OnClick="Cancel">Cancel</MudButton>
+        </EditForm>
+    }
+    else if (_expanded)
+    {
+        <div>
+            <div>Surname: @User.Surname</div>
+            <div>Email: @User.Email</div>
+            <div>Date of Birth: @User.DateOfBirth</div>
+            <div>Active: @User.IsActive</div>
+            <div id="activity-log">
+                @foreach (var log in _activityLogs)
+                {
+                    <div>@log.Action - @log.Timestamp</div>
+                }
+            </div>
+            <MudButton id="edit-button" OnClick="StartEdit">Edit</MudButton>
+            <MudButton id="delete-button" OnClick="DeleteAsync">Delete</MudButton>
+        </div>
+    }
+</div>
 
 @code {
     [Parameter, EditorRequired] public Guid RowKey { get; set; }
@@ -10,4 +72,117 @@
     [Parameter] public EventCallback<UserDto> OnSaved { get; set; }
     [Parameter] public EventCallback OnDeleted { get; set; }
     [Parameter] public EventCallback OnDiscardedNew { get; set; }
+
+    private bool _expanded;
+    private bool _editing;
+    private string? _emailError;
+    private IReadOnlyList<UserLogDto> _activityLogs = [];
+    private EditModel _editModel = new();
+
+    protected override void OnParametersSet()
+    {
+        if (IsNew)
+        {
+            _editModel = ToEditModel(User);
+        }
+    }
+
+    private async Task ToggleExpand()
+    {
+        if (!_expanded)
+        {
+            User = await UsersApi.GetUserByIdAsync(User.Id, recordAsViewed: true);
+            _activityLogs = await UsersApi.GetUserLogsAsync(User.Id);
+        }
+
+        _expanded = !_expanded;
+    }
+
+    private void StartEdit()
+    {
+        _editModel = ToEditModel(User);
+        _emailError = null;
+        _editing = true;
+    }
+
+    private void Cancel()
+    {
+        if (IsNew)
+        {
+            OnDiscardedNew.InvokeAsync();
+            return;
+        }
+
+        _editing = false;
+        _emailError = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _emailError = null;
+
+        try
+        {
+            UserDto saved;
+            if (IsNew)
+            {
+                saved = await UsersApi.CreateUserAsync(new CreateUserRequest
+                {
+                    Forename = _editModel.Forename,
+                    Surname = _editModel.Surname,
+                    Email = _editModel.Email,
+                    DateOfBirth = _editModel.DateOfBirth,
+                    IsActive = _editModel.IsActive
+                });
+            }
+            else
+            {
+                saved = await UsersApi.UpdateUserAsync(User.Id, new UpdateUserRequest
+                {
+                    Forename = _editModel.Forename,
+                    Surname = _editModel.Surname,
+                    Email = _editModel.Email,
+                    DateOfBirth = _editModel.DateOfBirth,
+                    IsActive = _editModel.IsActive
+                });
+            }
+
+            User = saved;
+            _editing = false;
+            Snackbar.Add(IsNew ? "User created successfully" : "User saved successfully", Severity.Success);
+            await OnSaved.InvokeAsync(saved);
+        }
+        catch (ApiException ex) when (ex.StatusCode == HttpStatusCode.BadRequest)
+        {
+            var problem = await ex.GetContentAsAsync<ValidationProblemDetails>();
+            _emailError = problem?.Errors.TryGetValue("Email", out var emailErrors) == true
+                ? emailErrors.FirstOrDefault()
+                : "This email is already in use.";
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        await UsersApi.DeleteUserAsync(User.Id);
+        Snackbar.Add("User deleted", Severity.Success);
+        await OnDeleted.InvokeAsync();
+    }
+
+    private static EditModel ToEditModel(UserDto user) => new()
+    {
+        Forename = user.Forename,
+        Surname = user.Surname,
+        Email = user.Email,
+        DateOfBirth = user.DateOfBirth,
+        IsActive = user.IsActive
+    };
+
+    private class EditModel
+    {
+        [Required] public string Forename { get; set; } = "";
+        [Required] public string Surname { get; set; } = "";
+        [Required, EmailAddress] public string Email { get; set; } = "";
+        [Required] public DateOnly? DateOfBirth { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
 }

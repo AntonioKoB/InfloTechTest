@@ -1,7 +1,44 @@
 @inject ILogsApi LogsApi
 
-<p>Not implemented</p>
+<div class="log-row">
+    <div id="log-row-header" @onclick="ToggleExpand" style="cursor:pointer">
+        @Log.UserId - @Log.Action - @Log.Timestamp
+    </div>
+
+    @if (_expanded)
+    {
+        <div id="log-changes">
+            @if (_changes.Count == 0)
+            {
+                <div>No changes recorded</div>
+            }
+            else
+            {
+                @foreach (var change in _changes)
+                {
+                    <div>@change.PropertyName: @change.OldValue -> @change.NewValue</div>
+                }
+            }
+        </div>
+    }
+</div>
 
 @code {
     [Parameter, EditorRequired] public UserLogDto Log { get; set; } = default!;
+
+    private bool _expanded;
+    private bool _fetched;
+    private IReadOnlyList<FieldChangeDto> _changes = [];
+
+    private async Task ToggleExpand()
+    {
+        if (!_fetched)
+        {
+            var detail = await LogsApi.GetLogByIdAsync(Log.Id);
+            _changes = detail.Changes;
+            _fetched = true;
+        }
+
+        _expanded = !_expanded;
+    }
 }
