@@ -1,0 +1,13 @@
+@inject IUsersApi UsersApi
+@inject ISnackbar Snackbar
+
+<p>Not implemented</p>
+
+@code {
+    [Parameter, EditorRequired] public Guid RowKey { get; set; }
+    [Parameter, EditorRequired] public UserDto User { get; set; } = default!;
+    [Parameter] public bool IsNew { get; set; }
+    [Parameter] public EventCallback<UserDto> OnSaved { get; set; }
+    [Parameter] public EventCallback OnDeleted { get; set; }
+    [Parameter] public EventCallback OnDiscardedNew { get; set; }
+}
