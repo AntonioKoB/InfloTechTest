@@ -115,3 +115,7 @@ Commit the generated files under `UserManagement.Data/Migrations` - they're appl
 ### 5. Production (Azure)
 
 Azure SQL is the intended production target - it's the same `Microsoft.EntityFrameworkCore.SqlServer` provider, so only the connection string changes, not the code. .NET User Secrets is a local-development-only mechanism (it's only loaded when `ASPNETCORE_ENVIRONMENT=Development`), so it plays no role in production. In Azure App Service, the equivalent is setting the connection string as an App Service Configuration value - this surfaces to the app as an environment variable, which ASP.NET Core's configuration system already reads automatically, so no code change is required. For stronger secret management (centralized rotation, RBAC-audited access) Azure Key Vault with a Managed Identity is a natural next step once a real deployment pipeline exists to attach it to.
+
+## Static assets (bundling)
+
+CSS and JS are bundled and minified via [`LigerShark.WebOptimizer.Core`](https://github.com/ligershark/WebOptimizer), configured in `UserManagement.Web/Program.cs`. Bootstrap's CSS + the site's own `site.css` are combined into a single `/css/bundle.css`, and jQuery + Bootstrap's JS bundle + `site.js` into a single `/js/bundle.js` - `_Layout.cshtml` references only these two files instead of the five individual ones. No extra tooling or build step is required; the middleware bundles/minifies on first request and serves from cache after that.
