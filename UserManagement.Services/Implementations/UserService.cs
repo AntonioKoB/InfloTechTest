@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using UserManagement.Data;
+using UserManagement.Data.Exceptions;
 using UserManagement.Models;
 using UserManagement.Services.Domain.Exceptions;
 using UserManagement.Services.Domain.Interfaces;
@@ -18,8 +18,8 @@ public class UserService : IUserService
     /// </summary>
     /// <param name="isActive"></param>
     /// <returns></returns>
-    public async Task<IEnumerable<User>> FilterByActiveAsync(bool isActive)
-        => (await _dataAccess.GetAllAsync<User>()).Where(u => u.IsActive == isActive);
+    public Task<IEnumerable<User>> FilterByActiveAsync(bool isActive)
+        => _dataAccess.WhereAsync<User>(u => u.IsActive == isActive);
 
     public Task<IEnumerable<User>> GetAllAsync() => _dataAccess.GetAllAsync<User>();
 
@@ -47,15 +47,16 @@ public class UserService : IUserService
             throw new EmailAlreadyExistsException(user.Email);
         }
 
-        await _dataAccess.UpdateAsync(user);
-    }
-
-    public async Task DeleteAsync(long id)
-    {
-        var user = await GetByIdAsync(id);
-        if (user is not null)
+        try
         {
-            await _dataAccess.DeleteAsync(user);
+            await _dataAccess.UpdateAsync(user);
+        }
+        catch (ConcurrencyConflictException)
+        {
+            throw new UserNoLongerExistsException(user.Id);
         }
     }
+
+    public Task DeleteAsync(long id)
+        => _dataAccess.DeleteWhereAsync<User>(u => u.Id == id);
 }

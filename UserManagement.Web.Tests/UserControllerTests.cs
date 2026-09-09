@@ -334,6 +334,34 @@ public class UserControllerTests
     }
 
     [Fact]
+    public async Task Edit_WhenUserWasDeletedByAnotherRequestSinceBeingFetched_MustReturnUserNotFoundView()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var controller = CreateController();
+        _userService
+            .Setup(s => s.GetByIdAsync(5))
+            .ReturnsAsync(new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1) });
+        var model = new UserFormViewModel
+        {
+            Forename = "Updated",
+            Surname = "User",
+            Email = "updated@example.com",
+            DateOfBirth = new DateOnly(1995, 4, 12),
+            IsActive = true
+        };
+        _userService
+            .Setup(s => s.UpdateAsync(It.IsAny<User>()))
+            .ThrowsAsync(new UserNoLongerExistsException(5));
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await controller.Edit(5, model);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeOfType<ViewResult>()
+            .Which.ViewName.Should().Be("UserNotFound");
+    }
+
+    [Fact]
     public async Task Delete_WhenUserExists_MustReturnViewResultWithUser()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.

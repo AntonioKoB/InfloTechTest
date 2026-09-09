@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using UserManagement.Data.Exceptions;
 using UserManagement.Models;
 
 namespace UserManagement.Data.Tests;
@@ -120,6 +121,42 @@ public class DataContextTests
     }
 
     [Fact]
+    public async Task WhereAsync_WhenPredicateMatchesSubset_MustReturnOnlyMatchingEntities()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Proves WhereAsync pushes the filter to the query provider (Where composed on IQueryable before
+        // materializing) rather than loading the whole table and filtering in C#, unlike the old
+        // GetAllAsync<User>().Where(...) approach this method replaces in UserService.FilterByActiveAsync.
+        var context = CreateContext();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = await context.WhereAsync<User>(u => u.IsActive == false);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().NotBeEmpty();
+        result.Should().OnlyContain(u => u.IsActive == false);
+    }
+
+    [Fact]
+    public async Task DeleteWhereAsync_OnInMemoryProvider_IsNotSupported_ProvenSeparatelyByManualVerification()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // EF Core's InMemory provider has no SQL translator for ExecuteDelete/ExecuteUpdate and throws for
+        // both - unlike the real SQL Server provider, which executes a genuine DELETE ... WHERE ... statement.
+        // Same permanent, intentional divergence as the unique-index gap below: these tests stay on InMemory
+        // by design, so DeleteWhereAsync's actual SQL translation and idempotency-under-race behavior is
+        // proven by manual verification against the real database, not by this suite.
+        var context = CreateContext();
+        var user = (await context.GetAllAsync<User>()).First();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var act = () => context.DeleteWhereAsync<User>(u => u.Id == user.Id);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
     public async Task CreateAsync_WhenEmailAlreadyExists_InMemoryProviderDoesNotEnforceTheUniqueIndex()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
@@ -175,6 +212,33 @@ public class DataContextTests
     }
 
     [Fact]
+    public async Task UpdateAsync_WhenEntityWasDeletedByAnotherRequestSinceBeingFetched_MustThrowConcurrencyConflictException()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Simulates two concurrent requests via two separate DataContext instances sharing the same
+        // underlying database: contextA fetches and mutates a user but hasn't saved yet, while contextB
+        // deletes that same row and saves first. EF Core's own optimistic-concurrency check (the UPDATE
+        // affects 0 rows instead of the expected 1) then surfaces as this app's own
+        // ConcurrencyConflictException, not a raw EF exception leaking out of the data layer.
+        var databaseName = Guid.NewGuid().ToString();
+        var contextA = CreateContext(databaseName);
+        var contextB = CreateContext(databaseName);
+
+        var trackedByA = await contextA.GetByIdAsync<User>(1L);
+        trackedByA!.Forename = "Changed By A";
+
+        var trackedByB = await contextB.GetByIdAsync<User>(1L);
+        contextB.Remove(trackedByB!);
+        await contextB.SaveChangesAsync();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var act = () => contextA.UpdateAsync(trackedByA);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        await act.Should().ThrowAsync<ConcurrencyConflictException>();
+    }
+
+    [Fact]
     public async Task GetAllAsync_WhenUpdated_MustReflectUpdatedEntity()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
@@ -198,7 +262,8 @@ public class DataContextTests
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var context = CreateContext();
         var entity = (await context.GetAllAsync<User>()).First();
-        await context.DeleteAsync(entity);
+        context.Remove(entity);
+        await context.SaveChangesAsync();
 
         // Act: Invokes the method under test with the arranged parameters.
         var result = await context.GetAllAsync<User>();
@@ -250,7 +315,8 @@ public class DataContextTests
             BeforeJson = "{}"
         };
         await context.CreateAsync(log);
-        await context.DeleteAsync(user);
+        context.Remove(user);
+        await context.SaveChangesAsync();
 
         // Act: Invokes the method under test with the arranged parameters.
         var result = await context.GetAllAsync<UserLog>();
@@ -302,10 +368,10 @@ public class DataContextTests
         result.Should().Be(before + 2);
     }
 
-    private DataContext CreateContext()
+    private DataContext CreateContext(string? databaseName = null)
     {
         var context = new DataContext(
-            new DbContextOptionsBuilder<DataContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+            new DbContextOptionsBuilder<DataContext>().UseInMemoryDatabase(databaseName ?? Guid.NewGuid().ToString()).Options);
 
         // The InMemory provider only applies OnModelCreating's HasData seed rows once the database is
         // actually created - unlike the real SQL Server app, which gets its schema/seed data from

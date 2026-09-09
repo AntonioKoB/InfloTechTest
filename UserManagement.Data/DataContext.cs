@@ -5,6 +5,7 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using UserManagement.Data.Exceptions;
 using UserManagement.Models;
 
 namespace UserManagement.Data;
@@ -65,6 +66,9 @@ public class DataContext : DbContext, IDataContext
     public async Task<TEntity?> FirstOrDefaultAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class
         => await base.Set<TEntity>().AsNoTracking().FirstOrDefaultAsync(predicate);
 
+    public async Task<IEnumerable<TEntity>> WhereAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class
+        => await base.Set<TEntity>().AsNoTracking().Where(predicate).ToListAsync();
+
     public async Task<IReadOnlyList<TEntity>> GetPageAsync<TEntity, TKey>(Expression<Func<TEntity, TKey>> orderBy, bool descending, int skip, int take) where TEntity : class
     {
         var query = base.Set<TEntity>().AsNoTracking();
@@ -81,12 +85,23 @@ public class DataContext : DbContext, IDataContext
     public Task UpdateAsync<TEntity>(TEntity entity) where TEntity : class
         => PersistAsync(() => base.Update(entity));
 
-    public Task DeleteAsync<TEntity>(TEntity entity) where TEntity : class
-        => PersistAsync(() => base.Remove(entity));
+    public Task DeleteWhereAsync<TEntity>(Expression<Func<TEntity, bool>> predicate) where TEntity : class
+        => base.Set<TEntity>().Where(predicate).ExecuteDeleteAsync();
 
     private async Task PersistAsync(Action trackerOperation)
     {
         trackerOperation();
-        await SaveChangesAsync();
+
+        try
+        {
+            await SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            // EF Core throws this when the affected-row-count doesn't match what it expected - most
+            // commonly, the row was deleted by someone else between being fetched and being saved. Wrapped
+            // so callers don't need to reference EF Core directly to handle it.
+            throw new ConcurrencyConflictException("The entity being saved no longer exists - it may have been deleted by another request.", ex);
+        }
     }
 }
