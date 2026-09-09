@@ -1,4 +1,6 @@
-﻿using UserManagement.Data;
+using Microsoft.AspNetCore.Identity;
+using UserManagement.Data;
+using UserManagement.Models;
 using UserManagement.Services.Domain.Implementations;
 using UserManagement.Services.Domain.Interfaces;
 
@@ -14,5 +16,7 @@ public static class ServiceCollectionExtensions
             .AddScoped<IUserService>(sp => new AuditingUserService(
                 sp.GetRequiredService<UserService>(),
                 sp.GetRequiredService<IUserLogService>(),
-                sp.GetRequiredService<IDataContext>()));
+                sp.GetRequiredService<IDataContext>()))
+            .AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>()
+            .AddScoped<ICredentialService, CredentialService>();
 }

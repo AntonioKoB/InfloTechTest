@@ -20,7 +20,7 @@ public class UserLogDiffBuilder : IUserLogDiffBuilder
         var before = log.BeforeJson is null ? null : JsonSerializer.Deserialize<User>(log.BeforeJson);
         var after = log.AfterJson is null ? null : JsonSerializer.Deserialize<User>(log.AfterJson);
 
-        var properties = typeof(User).GetProperties().Where(p => p.Name != nameof(User.Id));
+        var properties = typeof(User).GetProperties().Where(p => p.Name != nameof(User.Id) && p.Name != nameof(User.PasswordHash));
 
         var changes = new List<FieldChange>();
         foreach (var property in properties)

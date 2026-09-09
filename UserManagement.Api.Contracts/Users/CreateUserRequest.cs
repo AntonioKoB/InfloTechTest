@@ -16,5 +16,6 @@ public class CreateUserRequest
 
     public bool IsActive { get; set; } = true;
 
+    [Required]
     public string Password { get; set; } = "";
 }

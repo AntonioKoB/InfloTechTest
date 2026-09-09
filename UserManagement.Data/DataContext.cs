@@ -20,19 +20,25 @@ public class DataContext : DbContext, IDataContext
     {
         model.Entity<User>().HasIndex(u => u.Email).IsUnique();
 
+        // PasswordHasher output is salted, so it differs on every call - the seed value has to be a fixed
+        // literal for the same reason as the fixed seed timestamp below (HasData values are part of the
+        // model). This is the PasswordHasher (v3, PBKDF2) hash of "12345", the documented seed password
+        // that every seeded user shares so a reviewer can sign in as any of them.
+        const string SeedPasswordHash = "AQAAAAIAAYagAAAAEPZnlhpJfpSdxqhrGlbHhIasKXCG6qHDec7pxnfgcQXKywwpDcmZ8UEqvYWj8sN3+g==";
+
         var users = new[]
         {
-            new User { Id = 1, Forename = "Peter", Surname = "Loew", Email = "ploew@example.com", IsActive = true, DateOfBirth = new DateOnly(1955, 3, 22) },
-            new User { Id = 2, Forename = "Benjamin Franklin", Surname = "Gates", Email = "bfgates@example.com", IsActive = true, DateOfBirth = new DateOnly(1968, 7, 15) },
-            new User { Id = 3, Forename = "Castor", Surname = "Troy", Email = "ctroy@example.com", IsActive = false, DateOfBirth = new DateOnly(1970, 11, 2) },
-            new User { Id = 4, Forename = "Memphis", Surname = "Raines", Email = "mraines@example.com", IsActive = true, DateOfBirth = new DateOnly(1965, 5, 30) },
-            new User { Id = 5, Forename = "Stanley", Surname = "Goodspeed", Email = "sgodspeed@example.com", IsActive = true, DateOfBirth = new DateOnly(1972, 9, 18) },
-            new User { Id = 6, Forename = "H.I.", Surname = "McDunnough", Email = "himcdunnough@example.com", IsActive = true, DateOfBirth = new DateOnly(1958, 2, 10) },
-            new User { Id = 7, Forename = "Cameron", Surname = "Poe", Email = "cpoe@example.com", IsActive = false, DateOfBirth = new DateOnly(1975, 4, 5) },
-            new User { Id = 8, Forename = "Edward", Surname = "Malus", Email = "emalus@example.com", IsActive = false, DateOfBirth = new DateOnly(1969, 12, 25) },
-            new User { Id = 9, Forename = "Damon", Surname = "Macready", Email = "dmacready@example.com", IsActive = false, DateOfBirth = new DateOnly(1960, 8, 14) },
-            new User { Id = 10, Forename = "Johnny", Surname = "Blaze", Email = "jblaze@example.com", IsActive = true, DateOfBirth = new DateOnly(1980, 6, 21) },
-            new User { Id = 11, Forename = "Robin", Surname = "Feld", Email = "rfeld@example.com", IsActive = true, DateOfBirth = new DateOnly(1963, 1, 9) },
+            new User { Id = 1, Forename = "Peter", Surname = "Loew", Email = "ploew@example.com", IsActive = true, DateOfBirth = new DateOnly(1955, 3, 22), PasswordHash = SeedPasswordHash },
+            new User { Id = 2, Forename = "Benjamin Franklin", Surname = "Gates", Email = "bfgates@example.com", IsActive = true, DateOfBirth = new DateOnly(1968, 7, 15), PasswordHash = SeedPasswordHash },
+            new User { Id = 3, Forename = "Castor", Surname = "Troy", Email = "ctroy@example.com", IsActive = false, DateOfBirth = new DateOnly(1970, 11, 2), PasswordHash = SeedPasswordHash },
+            new User { Id = 4, Forename = "Memphis", Surname = "Raines", Email = "mraines@example.com", IsActive = true, DateOfBirth = new DateOnly(1965, 5, 30), PasswordHash = SeedPasswordHash },
+            new User { Id = 5, Forename = "Stanley", Surname = "Goodspeed", Email = "sgodspeed@example.com", IsActive = true, DateOfBirth = new DateOnly(1972, 9, 18), PasswordHash = SeedPasswordHash },
+            new User { Id = 6, Forename = "H.I.", Surname = "McDunnough", Email = "himcdunnough@example.com", IsActive = true, DateOfBirth = new DateOnly(1958, 2, 10), PasswordHash = SeedPasswordHash },
+            new User { Id = 7, Forename = "Cameron", Surname = "Poe", Email = "cpoe@example.com", IsActive = false, DateOfBirth = new DateOnly(1975, 4, 5), PasswordHash = SeedPasswordHash },
+            new User { Id = 8, Forename = "Edward", Surname = "Malus", Email = "emalus@example.com", IsActive = false, DateOfBirth = new DateOnly(1969, 12, 25), PasswordHash = SeedPasswordHash },
+            new User { Id = 9, Forename = "Damon", Surname = "Macready", Email = "dmacready@example.com", IsActive = false, DateOfBirth = new DateOnly(1960, 8, 14), PasswordHash = SeedPasswordHash },
+            new User { Id = 10, Forename = "Johnny", Surname = "Blaze", Email = "jblaze@example.com", IsActive = true, DateOfBirth = new DateOnly(1980, 6, 21), PasswordHash = SeedPasswordHash },
+            new User { Id = 11, Forename = "Robin", Surname = "Feld", Email = "rfeld@example.com", IsActive = true, DateOfBirth = new DateOnly(1963, 1, 9), PasswordHash = SeedPasswordHash },
         };
 
         model.Entity<User>().HasData(users);

@@ -9,6 +9,12 @@
             <EditForm Model="_model" OnValidSubmit="SaveAsync">
                 <DataAnnotationsValidator />
                 <UserFormFields Model="_model" />
+                <MudGrid Class="mt-2">
+                    <MudItem xs="6">
+                        <label class="field-label" for="input-password">Password</label>
+                        <InputText id="input-password" type="password" @bind-Value="_model.Password" class="field-input" />
+                    </MudItem>
+                </MudGrid>
                 @if (_emailError is not null)
                 {
                     <MudText id="email-error" Color="Color.Error" Class="mt-2">@_emailError</MudText>

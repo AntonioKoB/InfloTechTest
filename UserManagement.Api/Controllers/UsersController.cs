@@ -54,6 +54,7 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<UserDto>> Create(CreateUserRequest request)
     {
         var user = request.ToUser();
+        _credentialService.SetPassword(user, request.Password);
 
         try
         {
@@ -74,6 +75,10 @@ public class UsersController : ControllerBase
         if (user is null) return NotFound();
 
         request.ApplyTo(user);
+        if (!string.IsNullOrEmpty(request.Password))
+        {
+            _credentialService.SetPassword(user, request.Password);
+        }
 
         try
         {

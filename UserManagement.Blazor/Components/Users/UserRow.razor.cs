@@ -24,7 +24,7 @@ public partial class UserRow
     private bool _editing;
     private string? _emailError;
     private IReadOnlyList<UserLogDto> _activityLogs = [];
-    private UserEditModel _editModel = new();
+    private EditUserModel _editModel = new();
 
     private string Initials => $"{FirstLetter(User.Forename)}{FirstLetter(User.Surname)}";
 
@@ -83,16 +83,17 @@ public partial class UserRow
         await OnDeleted.InvokeAsync();
     }
 
-    private static UpdateUserRequest ToUpdateRequest(UserEditModel model) => new()
+    private static UpdateUserRequest ToUpdateRequest(EditUserModel model) => new()
     {
         Forename = model.Forename,
         Surname = model.Surname,
         Email = model.Email,
         DateOfBirth = model.DateOfBirth,
-        IsActive = model.IsActive
+        IsActive = model.IsActive,
+        Password = string.IsNullOrEmpty(model.Password) ? null : model.Password
     };
 
-    private static UserEditModel ToEditModel(UserDto user) => new()
+    private static EditUserModel ToEditModel(UserDto user) => new()
     {
         Forename = user.Forename,
         Surname = user.Surname,

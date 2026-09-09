@@ -1,4 +1,3 @@
-using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Identity;
 using UserManagement.Models;
@@ -17,7 +16,16 @@ public class CredentialService : ICredentialService
         _passwordHasher = passwordHasher;
     }
 
-    public void SetPassword(User user, string password) => throw new NotImplementedException();
+    public void SetPassword(User user, string password)
+        => user.PasswordHash = _passwordHasher.HashPassword(user, password);
 
-    public Task<User?> AuthenticateAsync(string email, string password) => throw new NotImplementedException();
+    public async Task<User?> AuthenticateAsync(string email, string password)
+    {
+        var user = await _userService.GetByEmailAsync(email);
+        if (user is null || !user.IsActive || user.PasswordHash is null)
+            return null;
+
+        var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
+        return result == PasswordVerificationResult.Failed ? null : user;
+    }
 }

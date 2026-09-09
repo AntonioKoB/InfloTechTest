@@ -18,7 +18,7 @@ public partial class AddUserModal
     [Inject] private IUsersApi UsersApi { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
 
-    private UserEditModel _model = new();
+    private AddUserModel _model = new();
     private string? _emailError;
 
     private async Task SaveAsync()
@@ -33,7 +33,8 @@ public partial class AddUserModal
                 Surname = _model.Surname,
                 Email = _model.Email,
                 DateOfBirth = _model.DateOfBirth,
-                IsActive = _model.IsActive
+                IsActive = _model.IsActive,
+                Password = _model.Password
             });
 
             _model = new();

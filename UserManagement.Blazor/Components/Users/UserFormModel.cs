@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace UserManagement.Blazor.Components.Users;
 
-public class UserEditModel
+public class UserFormModel
 {
     [Required] public string Forename { get; set; } = "";
     [Required] public string Surname { get; set; } = "";
