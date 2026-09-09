@@ -27,7 +27,7 @@ public class AuthEndpointsTests
         var response = SetupSuccessfulLogin();
 
         // Act
-        var result = await AuthEndpoints.LoginAsync(CreateRequest(), _authApi.Object, CreateHttpContext());
+        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext());
 
         // Assert
         result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be("/");
@@ -52,11 +52,31 @@ public class AuthEndpointsTests
             .Returns(Task.CompletedTask);
 
         // Act
-        await AuthEndpoints.LoginAsync(CreateRequest(), _authApi.Object, CreateHttpContext());
+        await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext());
 
         // Assert
         properties.Should().NotBeNull();
         properties!.ExpiresUtc.Should().Be(response.ExpiresAtUtc);
+    }
+
+    [Theory]
+    [InlineData("/users", "/users")]
+    [InlineData("/logs?page=2", "/logs?page=2")]
+    [InlineData("https://evil.example/", "/")]
+    [InlineData("//evil.example", "/")]
+    [InlineData("", "/")]
+    public async Task LoginAsync_MustFollowTheReturnUrlOnlyWhenItStaysWithinThisSite(string returnUrl, string expectedRedirect)
+    {
+        // Arrange
+        // The cookie middleware sends users to /login?ReturnUrl=<where they were heading>; honouring it is a
+        // nicety, but an absolute or protocol-relative value could bounce a freshly signed-in user anywhere.
+        SetupSuccessfulLogin();
+
+        // Act
+        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl, _authApi.Object, CreateHttpContext());
+
+        // Assert
+        result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be(expectedRedirect);
     }
 
     [Fact]
@@ -66,22 +86,11 @@ public class AuthEndpointsTests
         _authApi.Setup(a => a.LoginAsync(It.IsAny<LoginRequest>())).ThrowsAsync(await CreateUnauthorizedException());
 
         // Act
-        var result = await AuthEndpoints.LoginAsync(CreateRequest(), _authApi.Object, CreateHttpContext());
+        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext());
 
         // Assert
         result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be("/login?error=1");
         _authenticationService.Verify(s => s.SignInAsync(It.IsAny<HttpContext>(), It.IsAny<string>(), It.IsAny<ClaimsPrincipal>(), It.IsAny<AuthenticationProperties>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task LogoutAsync_MustSignOutAndRedirectToLogin()
-    {
-        // Act
-        var result = await AuthEndpoints.LogoutAsync(CreateHttpContext());
-
-        // Assert
-        result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be("/login");
-        _authenticationService.Verify(s => s.SignOutAsync(It.IsAny<HttpContext>(), CookieAuthenticationDefaults.AuthenticationScheme, It.IsAny<AuthenticationProperties?>()), Times.Once);
     }
 
     [Fact]
@@ -91,11 +100,43 @@ public class AuthEndpointsTests
         SetupSuccessfulLogin();
 
         // Act
-        var result = await AuthEndpoints.LoginAsync(CreateRequest(), _authApi.Object, CreateHttpContext(antiforgeryValidationPassed: false));
+        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext(antiforgeryValidationPassed: false));
 
         // Assert
         result.Should().BeAssignableTo<IStatusCodeHttpResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         _authApi.Verify(a => a.LoginAsync(It.IsAny<LoginRequest>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LogoutAsync_MustEndTheSessionOnTheApiWithTheCookieTokenThenSignOutAndRedirectToLogin()
+    {
+        // Arrange
+        // The API records the sign-out against the session; it needs the token that identifies it, which
+        // only the cookie principal holds.
+
+        // Act
+        var result = await AuthEndpoints.LogoutAsync(CreateHttpContext(sessionToken: "jwt-token"), _authApi.Object);
+
+        // Assert
+        _authApi.Verify(a => a.LogoutAsync("jwt-token"), Times.Once);
+        _authenticationService.Verify(s => s.SignOutAsync(It.IsAny<HttpContext>(), CookieAuthenticationDefaults.AuthenticationScheme, It.IsAny<AuthenticationProperties?>()), Times.Once);
+        result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be("/login");
+    }
+
+    [Fact]
+    public async Task LogoutAsync_WhenTheApiNoLongerAcceptsTheToken_MustStillSignOutLocally()
+    {
+        // Arrange
+        // An expired token is the normal reason for this; the cookie is what keeps the browser signed in and
+        // must be cleared regardless.
+        _authApi.Setup(a => a.LogoutAsync(It.IsAny<string>())).ThrowsAsync(await CreateUnauthorizedException());
+
+        // Act
+        var result = await AuthEndpoints.LogoutAsync(CreateHttpContext(sessionToken: "expired-token"), _authApi.Object);
+
+        // Assert
+        _authenticationService.Verify(s => s.SignOutAsync(It.IsAny<HttpContext>(), CookieAuthenticationDefaults.AuthenticationScheme, It.IsAny<AuthenticationProperties?>()), Times.Once);
+        result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be("/login");
     }
 
     [Fact]
@@ -107,10 +148,11 @@ public class AuthEndpointsTests
         // token-less post would still sign the user out. The handler has to check the outcome itself.
 
         // Act
-        var result = await AuthEndpoints.LogoutAsync(CreateHttpContext(antiforgeryValidationPassed: false));
+        var result = await AuthEndpoints.LogoutAsync(CreateHttpContext(antiforgeryValidationPassed: false, sessionToken: "jwt-token"), _authApi.Object);
 
         // Assert
         result.Should().BeAssignableTo<IStatusCodeHttpResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        _authApi.Verify(a => a.LogoutAsync(It.IsAny<string>()), Times.Never);
         _authenticationService.Verify(s => s.SignOutAsync(It.IsAny<HttpContext>(), It.IsAny<string>(), It.IsAny<AuthenticationProperties?>()), Times.Never);
     }
 
@@ -149,7 +191,7 @@ public class AuthEndpointsTests
 
     private static LoginRequest CreateRequest() => new() { Email = "ploew@example.com", Password = "12345" };
 
-    private HttpContext CreateHttpContext(bool antiforgeryValidationPassed = true)
+    private HttpContext CreateHttpContext(bool antiforgeryValidationPassed = true, string? sessionToken = null)
     {
         var httpContext = new DefaultHttpContext
         {
@@ -158,6 +200,14 @@ public class AuthEndpointsTests
 
         // What the antiforgery middleware leaves behind after checking the token on a real request.
         httpContext.Features.Set<IAntiforgeryValidationFeature>(new StubAntiforgeryValidationFeature(antiforgeryValidationPassed));
+
+        if (sessionToken is not null)
+        {
+            // What the cookie middleware leaves behind for a signed-in browser.
+            httpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(ClaimTypes.Name, "Peter Loew"), new Claim(AuthClaimTypes.AccessToken, sessionToken)],
+                CookieAuthenticationDefaults.AuthenticationScheme));
+        }
 
         return httpContext;
     }

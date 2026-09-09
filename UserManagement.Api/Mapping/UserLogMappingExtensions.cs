@@ -29,6 +29,8 @@ public static class UserLogMappingExtensions
         DomainAction.Viewed => UserLogAction.Viewed,
         DomainAction.Updated => UserLogAction.Updated,
         DomainAction.Deleted => UserLogAction.Deleted,
+        DomainAction.LoggedIn => UserLogAction.LoggedIn,
+        DomainAction.LoggedOut => UserLogAction.LoggedOut,
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, null)
     };
 }

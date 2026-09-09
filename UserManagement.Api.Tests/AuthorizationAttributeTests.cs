@@ -17,6 +17,7 @@ public class AuthorizationAttributeTests
     [Theory]
     [InlineData(typeof(UsersController))]
     [InlineData(typeof(LogsController))]
+    [InlineData(typeof(AuthController))]
     public void ProtectedControllers_MustRequireAnAuthenticatedCaller(Type controllerType)
     {
         // Act

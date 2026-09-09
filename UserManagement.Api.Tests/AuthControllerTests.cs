@@ -1,8 +1,10 @@
 using System;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.IdentityModel.JsonWebTokens;
 using UserManagement.Api.Auth;
 using UserManagement.Api.Contracts.Auth;
 using UserManagement.Api.Controllers;
@@ -82,6 +84,32 @@ public class AuthControllerTests
             .Which.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
         _jwtTokenService.Verify(s => s.CreateToken(It.IsAny<User>()), Times.Never);
     }
+
+    [Fact]
+    public async Task Logout_MustEndTheSessionOfTheUserNamedInTheBearerToken()
+    {
+        // Arrange
+        // No body on this endpoint: the validated token's subject is the only trustworthy statement of who is
+        // signing out.
+        var controller = CreateController();
+        SignInAs(controller, userId: 7);
+
+        // Act
+        var result = await controller.Logout();
+
+        // Assert
+        _credentialService.Verify(s => s.SignOutAsync(7), Times.Once);
+        result.Should().BeOfType<NoContentResult>();
+    }
+
+    private static void SignInAs(AuthController controller, long userId)
+        => controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(JwtRegisteredClaimNames.Sub, userId.ToString())], "Bearer"))
+            }
+        };
 
     private User SetupAuthenticatedUser()
     {

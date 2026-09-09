@@ -228,7 +228,9 @@ Any random value works (for example the output of `openssl rand -base64 48`). Ro
 2. The Blazor host calls the API's `POST /api/auth/login` with the credentials. The API verifies the password hash through `ICredentialService` and issues a signed JWT (HS256, 60 minutes by default) carrying the user's id, email and name.
 3. The Blazor host signs the browser in with an encrypted, HttpOnly authentication cookie whose principal carries the JWT as a claim. The token never reaches browser script, and the cookie expires when the token does.
 4. Every API call the Blazor app makes goes through `BearerTokenHandler`, which attaches the token as an `Authorization: Bearer` header. A 401 from the API forces a full reload of the sign-in page.
-5. `POST /logout`, also antiforgery-protected, clears the cookie.
+5. `POST /logout`, also antiforgery-protected, tells the API the session has ended (`POST /api/auth/logout`, bearer-authenticated) and clears the cookie.
+
+Signing in and signing out are recorded in the audit log as `LoggedIn` and `LoggedOut` entries against the user, alongside the existing Created/Viewed/Updated/Deleted actions. They mark session boundaries rather than changes, so they carry no snapshot and never show a diff. Failed sign-in attempts are not recorded: there is no verified user to attribute them to.
 
 On the API, `UsersController` and `LogsController` carry `[Authorize]` and `AuthController.Login` carries `[AllowAnonymous]`; validation is the standard JWT bearer scheme. The API is bearer-only and sets no cookies, so cross-site request forgery does not apply to it. The antiforgery validation lives on the Blazor host's two form posts, the only requests that change the browser's sign-in state; a post without the token is rejected with a 400.
 

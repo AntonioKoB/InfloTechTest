@@ -23,14 +23,12 @@ public static class AuthEndpoints
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost("/login", LoginAsync);
-        // Cast to Delegate: with only HttpContext as a parameter the method group would otherwise bind to the
-        // RequestDelegate overload, which discards the IResult instead of writing it to the response.
-        endpoints.MapPost("/logout", (Delegate)LogoutAsync);
+        endpoints.MapPost("/logout", LogoutAsync);
         return endpoints;
     }
 
     [RequireAntiforgeryToken]
-    public static async Task<IResult> LoginAsync([FromForm] LoginRequest request, IAuthApi authApi, HttpContext httpContext)
+    public static async Task<IResult> LoginAsync([FromForm] LoginRequest request, [FromForm] string? returnUrl, IAuthApi authApi, HttpContext httpContext)
     {
         if (!AntiforgeryValidationPassed(httpContext)) return AntiforgeryFailure();
 
@@ -56,27 +54,49 @@ public static class AuthEndpoints
             new ClaimsPrincipal(identity),
             new AuthenticationProperties { ExpiresUtc = login.ExpiresAtUtc });
 
-        return Results.Redirect("/");
+        return Results.Redirect(LocalReturnUrlOrHome(returnUrl));
     }
 
     [RequireAntiforgeryToken]
-    public static async Task<IResult> LogoutAsync(HttpContext httpContext)
+    public static async Task<IResult> LogoutAsync(HttpContext httpContext, IAuthApi authApi)
     {
         if (!AntiforgeryValidationPassed(httpContext)) return AntiforgeryFailure();
+
+        // Tell the API first so the sign-out is audited against the session's token. If the API already
+        // rejects that token (expired), the local sign-out still goes ahead - the cookie is what keeps the
+        // browser signed in, and it must go either way.
+        var token = httpContext.User.FindFirst(AuthClaimTypes.AccessToken)?.Value;
+        if (token is not null)
+        {
+            try
+            {
+                await authApi.LogoutAsync(token);
+            }
+            catch (ApiException)
+            {
+            }
+        }
 
         await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return Results.Redirect("/login");
     }
 
-    // The antiforgery middleware validates the token for [RequireAntiforgeryToken] endpoints and records the
-    // outcome as a request feature, but only endpoints that bind form parameters turn a failed validation
-    // into a 400 on their own. Logout binds nothing, so both handlers check the outcome themselves: a post
-    // that was not validated (no form body, or a forged one) is rejected before it can touch the sign-in state.
+    // Only ever redirect within this site: an absolute or protocol-relative ReturnUrl could send a freshly
+    // signed-in user anywhere.
+    private static string LocalReturnUrlOrHome(string? returnUrl)
+        => !string.IsNullOrEmpty(returnUrl) && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//") && !returnUrl.StartsWith("/\\")
+            ? returnUrl
+            : "/";
+
     // A 400 with a body: the status-code-pages middleware re-executes body-less 4xx responses through the
     // NotFound page, which sits behind [Authorize] and would turn this into a redirect to the login page.
     private static IResult AntiforgeryFailure()
         => Results.Problem(title: "The request could not be verified as coming from this site.", statusCode: StatusCodes.Status400BadRequest);
 
+    // The antiforgery middleware validates the token for [RequireAntiforgeryToken] endpoints and records the
+    // outcome as a request feature, but only endpoints that bind form parameters turn a failed validation
+    // into a 400 on their own. Logout binds nothing, so both handlers check the outcome themselves: a post
+    // that was not validated (no form body, or a forged one) is rejected before it can touch the sign-in state.
     private static bool AntiforgeryValidationPassed(HttpContext httpContext)
         => httpContext.Features.Get<IAntiforgeryValidationFeature>() is { IsValid: true };
 }

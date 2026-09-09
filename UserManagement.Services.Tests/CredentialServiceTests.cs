@@ -95,6 +95,21 @@ public class CredentialServiceTests
         result.Should().BeNull();
     }
 
+    [Fact]
+    public async Task SignOutAsync_MustCompleteWithoutTouchingTheUserStore()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Tokens are stateless, so there is nothing to revoke and the audit entry lives in the decorator. This
+        // pins down that the base service stays a no-op rather than, say, deactivating the user.
+        var service = CreateService();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        await service.SignOutAsync(1);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        _userService.VerifyNoOtherCalls();
+    }
+
     private User SetupUser(string password, bool isActive = true)
     {
         var user = CreateUser(isActive);

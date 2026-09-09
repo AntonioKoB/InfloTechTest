@@ -136,5 +136,23 @@ public class UserLogDiffBuilderTests
         result.Should().NotContain(c => c.PropertyName == nameof(User.PasswordHash));
     }
 
+    [Theory]
+    [InlineData(UserLogAction.LoggedIn)]
+    [InlineData(UserLogAction.LoggedOut)]
+    public void Build_WhenActionIsASessionEvent_MustReturnNoChanges(UserLogAction action)
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // LoggedIn/LoggedOut mark the boundaries of a session and carry no snapshot at all. Without an explicit
+        // exclusion the property walk would emit a "nothing -> nothing" row for every field.
+        var builder = CreateBuilder();
+        var log = new UserLog { UserId = 1, Action = action, Timestamp = DateTime.UtcNow, BeforeJson = null, AfterJson = null };
+
+        // Act: Invokes the method under test with the arranged parameters.
+        var result = builder.Build(log);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        result.Should().BeEmpty();
+    }
+
     private static UserLogDiffBuilder CreateBuilder() => new();
 }

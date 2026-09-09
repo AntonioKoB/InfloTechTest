@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.IdentityModel.JsonWebTokens;
 using UserManagement.Api.Auth;
 using UserManagement.Api.Contracts.Auth;
 using UserManagement.Services.Domain.Interfaces;
@@ -5,6 +7,7 @@ using UserManagement.Services.Domain.Interfaces;
 namespace UserManagement.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/auth")]
 public class AuthController : ControllerBase
 {
@@ -33,5 +36,16 @@ public class AuthController : ControllerBase
             DisplayName = $"{user.Forename} {user.Surname}",
             Email = user.Email
         });
+    }
+
+    /// <summary>
+    /// Ends the session identified by the bearer token. There is no body: the token says who is signing out.
+    /// </summary>
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout()
+    {
+        var userId = long.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+        await _credentialService.SignOutAsync(userId);
+        return NoContent();
     }
 }

@@ -21,4 +21,13 @@ public interface ICredentialService
     /// <param name="password"></param>
     /// <returns></returns>
     Task<User?> AuthenticateAsync(string email, string password);
+
+    /// <summary>
+    /// End the given user's session on the server side. Tokens are stateless, so there is nothing to revoke
+    /// today - the call exists so that signing out is audited exactly like signing in, and so that token
+    /// revocation can be added here later without touching any caller.
+    /// </summary>
+    /// <param name="userId"></param>
+    /// <returns></returns>
+    Task SignOutAsync(long userId);
 }

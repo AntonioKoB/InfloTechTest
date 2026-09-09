@@ -9,6 +9,7 @@
         <MudText Typo="Typo.body2" Class="mb-4">Use the email and password of a stored user.</MudText>
         <form method="post" action="/login">
             <AntiforgeryToken />
+            <input type="hidden" name="ReturnUrl" value="@ReturnUrl" />
             <label class="field-label" for="input-email">Email</label>
             <input id="input-email" name="Email" type="email" class="field-input" required autocomplete="username" autofocus />
             <label class="field-label mt-3" for="input-password">Password</label>

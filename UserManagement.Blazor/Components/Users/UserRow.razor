@@ -78,7 +78,7 @@
                             @foreach (var log in _activityLogs)
                             {
                                 <tr>
-                                    <td><span class="log-action log-action-@log.Action.ToString().ToLowerInvariant()">@log.Action</span></td>
+                                    <td><span class="log-action log-action-@log.Action.ToCssModifier()">@log.Action.ToDisplayName()</span></td>
                                     <td>@log.Timestamp.ToString("dd MMM yyyy HH:mm")</td>
                                 </tr>
                             }

@@ -49,6 +49,19 @@ public class LoginPageTests : BunitContext
     }
 
     [Fact]
+    public void Render_WithAReturnUrl_MustCarryItInAHiddenFieldSoTheLoginEndpointCanHonourIt()
+    {
+        // Arrange
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/login?ReturnUrl=%2Fusers");
+
+        // Act
+        var cut = Render<LoginPage>();
+
+        // Assert
+        cut.Find("input[type=hidden][name=ReturnUrl]").GetAttribute("value").Should().Be("/users");
+    }
+
+    [Fact]
     public void Render_WithoutAnError_MustNotShowAnErrorMessage()
     {
         // Act

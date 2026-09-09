@@ -5,5 +5,7 @@ public enum UserLogAction
     Created,
     Viewed,
     Updated,
-    Deleted
+    Deleted,
+    LoggedIn,
+    LoggedOut
 }

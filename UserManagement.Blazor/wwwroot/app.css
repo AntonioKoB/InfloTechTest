@@ -157,6 +157,8 @@ h1:focus {
 .log-action-updated { background-color: #0288d1; }
 .log-action-deleted { background-color: #c62828; }
 .log-action-viewed { background-color: #757575; }
+.log-action-loggedin { background-color: #6a1b9a; }
+.log-action-loggedout { background-color: #455a64; }
 
 .log-timestamp {
     color: rgba(0, 0, 0, 0.6);
