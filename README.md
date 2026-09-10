@@ -322,6 +322,78 @@ dotnet build --configuration Release --no-restore
 dotnet test --configuration Release --no-build
 ```
 
+## Infrastructure
+
+Everything the two hosts need on Azure is declared in one Bicep template, `infra/main.bicep`, deployed at resource-group scope, with one parameter file per environment (`infra/dev.bicepparam` today). Bicep rather than Terraform because there is no state file to host or lock - Azure Resource Manager is the state - and the only tooling is the Azure CLI that a deployment pipeline already needs. The environment name is a parameter and appears in every resource name, so a new environment is one more parameter file. The web apps and the SQL server carry a `uniqueString(resourceGroup().id)` suffix because their names must be unique across all of Azure; everything else follows the `<type>-inflo-<environment>` convention.
+
+| Resource | Name | Tier |
+|---|---|---|
+| App Service plan (Linux) | `plan-inflo-<env>` | F1 |
+| Web app: `UserManagement.Api` | `app-inflo-api-<env>-<suffix>` | .NET 10 on the plan above |
+| Web app: `UserManagement.Blazor` | `app-inflo-blazor-<env>-<suffix>` | .NET 10 on the plan above, WebSockets on |
+| Azure SQL logical server | `sql-inflo-<env>-<suffix>` | - |
+| Azure SQL database | `sqldb-inflo-<env>` | General Purpose serverless, `useFreeLimit` |
+| Log Analytics workspace | `log-inflo-<env>` | PerGB2018, 0.1 GB daily cap |
+| Application Insights | `appi-inflo-<env>` | Workspace-based |
+
+### Tiers and their limits
+
+The development environment runs on the smallest tiers; scaling any of them up is a change to the template, not to the code. The limits worth knowing:
+
+- **App Service F1** gives 60 CPU-minutes a day, 1 GB of memory and a shared instance for the two apps. There is no Always On, so an idle app is unloaded and the first request after that pays a cold start. The Health check feature is not active on the Free tier; both apps still declare `/health` as their path so it lights up the moment the plan is scaled up. Linux was chosen over Windows: the .NET 10 runtime is one `linuxFxVersion` line. Quota for this plan tier is granted per region and can be zero in a region a subscription has never used for App Service, which is why the hosting region is its own parameter (`hostingLocation`) and can differ from the region the data lives in.
+- **Azure SQL serverless with `useFreeLimit`** has a monthly allowance of vCore-seconds. `freeLimitExhaustionBehavior` is `AutoPause`: when the allowance runs out the database pauses until the next month instead of billing. The database also auto-pauses after an hour idle, so the first request after a pause waits for it to resume (the API's [retry policy](#api-to-database) covers that). One caveat when checking the tier from the CLI: older Azure CLI releases report `useFreeLimit` as `null` even when it is set (their SQL API version predates the property). The portal's Pricing tier line is authoritative, and the `kind` property `az sql db show` returns contains `freelimit` on any CLI version.
+- **Application Insights** writes to a workspace with a 0.1 GB daily cap, about 3 GB a month, so a runaway log loop is bounded.
+
+App Service terminates TLS at its front end and forwards plain HTTP to the container, so both apps get `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`; without it `UseHttpsRedirection` would see every request as HTTP and redirect forever.
+
+### What the template wires
+
+The settings listed under [Production (Azure)](#5-production-azure) are all composed inside the template, so nothing has to be typed into the portal:
+
+| App | Setting | Source |
+|---|---|---|
+| `UserManagement.Api` | connection string `DefaultConnection` (SQL Azure) | the SQL server's FQDN, the database name and the two admin parameters |
+| `UserManagement.Api` | `Jwt__SigningKey` | the `jwtSigningKey` parameter |
+| `UserManagement.Blazor` | `Api__BaseUrl` | `https://` + the API site's default hostname |
+| both | `APPLICATIONINSIGHTS_CONNECTION_STRING` | the Application Insights component |
+| both | `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | `true`, see above |
+
+The template is the source of truth for configuration: each deployment replaces the app settings with exactly this set, so a value added by hand in the portal does not survive the next deployment. The SQL server's firewall has the `AllowAllWindowsAzureIps` rule (0.0.0.0), which admits connections from Azure services only; the API needs it because it runs the EF Core migrations at startup. The template outputs both hostnames, both site names, the SQL server FQDN and the Application Insights connection string, which is what a deployment pipeline needs next.
+
+### Deploying
+
+One-time bootstrap: a resource group, and three values that are secrets. The three secrets are not in any file; the parameter file reads them from environment variables at deployment time (`readEnvironmentVariable`), so the same command works from a laptop and from a pipeline that maps its secrets onto the same names. The SQL login cannot be a reserved name such as `admin` or `sa`; the password needs 8 to 128 characters from at least three of upper case, lower case, digits and symbols; the signing key needs 32 or more random bytes (`openssl rand -base64 48` produces one).
+
+Bash:
+
+```bash
+az group create --name rg-inflo-dev --location uksouth
+export SQL_ADMIN_LOGIN='<login>'
+export SQL_ADMIN_PASSWORD='<password>'
+export JWT_SIGNING_KEY='<key>'
+```
+
+PowerShell:
+
+```powershell
+az group create --name rg-inflo-dev --location uksouth
+$env:SQL_ADMIN_LOGIN = '<login>'
+$env:SQL_ADMIN_PASSWORD = '<password>'
+$env:JWT_SIGNING_KEY = '<key>'
+```
+
+The variables live only in that shell session, so the deployment commands below run from the same window. Preview the changes, then apply them:
+
+```bash
+az deployment group what-if --resource-group rg-inflo-dev --template-file infra/main.bicep --parameters infra/dev.bicepparam
+```
+
+```bash
+az deployment group create --resource-group rg-inflo-dev --template-file infra/main.bicep --parameters infra/dev.bicepparam
+```
+
+The deployment is idempotent - running it again re-applies the template and reports no changes when nothing drifted - so a deployment pipeline runs it on every release before publishing the applications. `az bicep build` and `az bicep lint` validate the template offline, and the `what-if` above is the check to run before any change to it.
+
 ## Points to improve
 
 Known gaps, in the order they would be tackled:
