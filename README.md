@@ -5,7 +5,7 @@
 The exercise is an ASP.NET Core web application backed by Entity Framework Core, which faciliates management of some fictional users.
 We recommend that you use [Visual Studio (Community Edition)](https://visualstudio.microsoft.com/downloads) or [Visual Studio Code](https://code.visualstudio.com/Download) to run and modify the application. 
 
-**The UI has been re-implemented in Blazor talking to a REST API, so the solution now runs as two applications, and it uses SQL Server via Entity Framework Core migrations. See the [Documentation](#documentation) section below for the solution layout, how to run it, and how to set up a database to run it against.**
+**The UI has been re-implemented in Blazor talking to a REST API, so the solution now runs as two applications, and it uses SQL Server via Entity Framework Core migrations. See the [Documentation](#documentation) section below for the solution layout, how to run it, and how to set up a database to run it against. A development environment is deployed to Azure on every push to `main`: [app-inflo-blazor-dev-p5pupochhqltc.azurewebsites.net](https://app-inflo-blazor-dev-p5pupochhqltc.azurewebsites.net) (see [Live environment](#live-environment)).**
 
 ## The Exercise
 Complete as many of the tasks below as you feel comfortable with. These are split into 4 levels of difficulty 
@@ -397,6 +397,15 @@ The deployment is idempotent - running it again re-applies the template and repo
 ## Continuous deployment
 
 Every push to `main` (and a manual run from the Actions tab) runs the `CD` workflow, `.github/workflows/cd.yml`. It re-applies the Bicep template and then publishes both applications to the sites the template created, so infrastructure and code always move together and a change to the template needs no separate step. The `CI` workflow still guards pull requests; `CD` repeats the build and the tests itself so nothing red is ever deployed.
+
+### Live environment
+
+The site names come from the template (`app-inflo-<app>-<env>-<suffix>`, the suffix derived from the resource group), so these addresses are stable across deployments. The Free tier unloads an idle app, so the first request after a quiet spell can take a while.
+
+| App | URL | Health |
+|---|---|---|
+| `UserManagement.Blazor` | https://app-inflo-blazor-dev-p5pupochhqltc.azurewebsites.net | [/health](https://app-inflo-blazor-dev-p5pupochhqltc.azurewebsites.net/health) |
+| `UserManagement.Api` | https://app-inflo-api-dev-p5pupochhqltc.azurewebsites.net | [/health](https://app-inflo-api-dev-p5pupochhqltc.azurewebsites.net/health) |
 
 ### How the workflow logs in
 
