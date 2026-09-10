@@ -20,5 +20,7 @@ public class User
     [JsonIgnore]
     public string? PasswordHash { get; set; }
 
+    // The service-layer cache stores and hands out copies rather than the instance it was given, so a caller
+    // editing a fetched user in place before saving can never alter the cached one.
     public User Clone() => (User)MemberwiseClone();
 }

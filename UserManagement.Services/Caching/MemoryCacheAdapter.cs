@@ -4,6 +4,12 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace UserManagement.Services.Caching;
 
+/// <summary>
+/// ICache over the framework's in-process IMemoryCache. Values are held by reference, so the decorator that
+/// uses this cache is responsible for never handing a cached instance to a caller (see CachingUserService).
+/// Per process by design: on a scaled-out deployment each instance has its own cache and its own
+/// invalidation, which is what a distributed adapter would replace.
+/// </summary>
 public class MemoryCacheAdapter : ICache
 {
     private readonly IMemoryCache _cache;

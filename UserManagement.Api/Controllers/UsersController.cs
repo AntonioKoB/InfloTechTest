@@ -72,7 +72,7 @@ public class UsersController : ControllerBase
             return EmailConflict(ex);
         }
 
-        await _outputCache.EvictByTagAsync(OutputCachingExtensions.UsersTag, CancellationToken.None);
+        await EvictUsersListAsync();
         return CreatedAtAction(nameof(GetById), new { id = user.Id }, user.ToDto());
     }
 
@@ -101,7 +101,7 @@ public class UsersController : ControllerBase
             return NotFound();
         }
 
-        await _outputCache.EvictByTagAsync(OutputCachingExtensions.UsersTag, CancellationToken.None);
+        await EvictUsersListAsync();
         return Ok(user.ToDto());
     }
 
@@ -109,7 +109,7 @@ public class UsersController : ControllerBase
     public async Task<IActionResult> Delete(long id)
     {
         await _userService.DeleteAsync(id);
-        await _outputCache.EvictByTagAsync(OutputCachingExtensions.UsersTag, CancellationToken.None);
+        await EvictUsersListAsync();
         return NoContent();
     }
 
@@ -118,4 +118,10 @@ public class UsersController : ControllerBase
         ModelState.AddModelError(nameof(UserDto.Email), ex.Message);
         return ValidationProblem(ModelState);
     }
+
+    // Called after a write has succeeded. The cached list must go even if the caller has disconnected by now,
+    // so this deliberately ignores the request's cancellation token. The single-user cache is invalidated by
+    // the service layer, where that read is cached.
+    private Task EvictUsersListAsync()
+        => _outputCache.EvictByTagAsync(OutputCachingExtensions.UsersTag, CancellationToken.None).AsTask();
 }

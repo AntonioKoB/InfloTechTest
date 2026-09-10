@@ -16,6 +16,7 @@ public static class ServiceCollectionExtensions
             .AddScoped<UserService>()
             .AddScoped<IUserLogService, UserLogService>()
             .AddScoped<IUserLogDiffBuilder, UserLogDiffBuilder>()
+            // Auditing wraps caching on purpose: a read served from the cache is still recorded as a view.
             .AddScoped<IUserService>(sp => new AuditingUserService(
                 new CachingUserService(sp.GetRequiredService<UserService>(), sp.GetRequiredService<ICache>()),
                 sp.GetRequiredService<IUserLogService>(),
