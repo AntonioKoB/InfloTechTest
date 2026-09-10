@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Scalar.AspNetCore;
 using UserManagement.Api.Auth;
+using UserManagement.Api.Caching;
 using UserManagement.Api.Health;
 using UserManagement.Data;
 
@@ -14,7 +15,8 @@ builder.Services
     .AddDataAccess(builder.Configuration)
     .AddDomainServices()
     .AddJwtAuthentication(builder.Configuration, builder.Environment)
-    .AddApiHealthChecks();
+    .AddApiHealthChecks()
+    .AddApiOutputCaching();
 
 builder.Services
     .AddControllers()
@@ -41,6 +43,7 @@ app.UseHttpsRedirection();
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseOutputCache();
 
 app.MapControllers();
 

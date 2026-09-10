@@ -1,4 +1,6 @@
+using System.Threading;
 using Microsoft.AspNetCore.OutputCaching;
+using UserManagement.Api.Caching;
 using UserManagement.Api.Contracts.Logs;
 using UserManagement.Api.Contracts.Users;
 using UserManagement.Api.Mapping;
@@ -26,6 +28,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet]
+    [OutputCache(PolicyName = OutputCachingExtensions.UsersListPolicy)]
     public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers(UserListFilter filter = UserListFilter.All)
     {
         var users = filter switch
@@ -69,6 +72,7 @@ public class UsersController : ControllerBase
             return EmailConflict(ex);
         }
 
+        await _outputCache.EvictByTagAsync(OutputCachingExtensions.UsersTag, CancellationToken.None);
         return CreatedAtAction(nameof(GetById), new { id = user.Id }, user.ToDto());
     }
 
@@ -97,6 +101,7 @@ public class UsersController : ControllerBase
             return NotFound();
         }
 
+        await _outputCache.EvictByTagAsync(OutputCachingExtensions.UsersTag, CancellationToken.None);
         return Ok(user.ToDto());
     }
 
@@ -104,6 +109,7 @@ public class UsersController : ControllerBase
     public async Task<IActionResult> Delete(long id)
     {
         await _userService.DeleteAsync(id);
+        await _outputCache.EvictByTagAsync(OutputCachingExtensions.UsersTag, CancellationToken.None);
         return NoContent();
     }
 

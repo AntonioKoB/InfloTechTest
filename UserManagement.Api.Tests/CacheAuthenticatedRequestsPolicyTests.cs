@@ -7,10 +7,13 @@ using UserManagement.Api.Caching;
 namespace UserManagement.Api.Tests;
 
 /// <summary>
-/// The framework's default output-cache policy switches caching off for any request that carries an
-/// Authorization header, so every call to this API would go uncached. This policy is appended to the users
-/// list policy to opt that one endpoint back in: the list is the same for every signed-in caller, so one
-/// shared cached response is correct. It must only ever do so for a GET.
+/// The framework's default output-cache policy switches caching off for authenticated callers twice: at
+/// request time, for any request carrying an Authorization header, and again at response time, for any
+/// request whose user turned out to be authenticated. Every call to this API is both, so it would all go
+/// uncached. This policy is appended to the users list policy to opt that one endpoint back in at both
+/// points: the list is the same for every signed-in caller, so one shared cached response is correct. It
+/// must only ever do so for a GET, and at response time only under the default policy's other rules (a
+/// 200 that sets no cookie).
 /// </summary>
 public class CacheAuthenticatedRequestsPolicyTests
 {
@@ -42,6 +45,51 @@ public class CacheAuthenticatedRequestsPolicyTests
 
         // Assert
         context.AllowCacheLookup.Should().BeFalse();
+        context.AllowCacheStorage.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ServeResponseAsync_WhenAuthenticatedResponseIsA200WithoutCookies_MustAllowStorage()
+    {
+        // Arrange
+        var context = CreateContextLeftByTheDefaultPolicy(HttpMethods.Get);
+        context.HttpContext.Response.StatusCode = StatusCodes.Status200OK;
+
+        // Act
+        await CreatePolicy().ServeResponseAsync(context, CancellationToken.None);
+
+        // Assert
+        context.AllowCacheStorage.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(StatusCodes.Status404NotFound)]
+    [InlineData(StatusCodes.Status500InternalServerError)]
+    public async Task ServeResponseAsync_WhenResponseIsNotA200_MustLeaveStorageDisabled(int statusCode)
+    {
+        // Arrange
+        var context = CreateContextLeftByTheDefaultPolicy(HttpMethods.Get);
+        context.HttpContext.Response.StatusCode = statusCode;
+
+        // Act
+        await CreatePolicy().ServeResponseAsync(context, CancellationToken.None);
+
+        // Assert
+        context.AllowCacheStorage.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ServeResponseAsync_WhenResponseSetsACookie_MustLeaveStorageDisabled()
+    {
+        // Arrange
+        var context = CreateContextLeftByTheDefaultPolicy(HttpMethods.Get);
+        context.HttpContext.Response.StatusCode = StatusCodes.Status200OK;
+        context.HttpContext.Response.Headers.SetCookie = "session=abc";
+
+        // Act
+        await CreatePolicy().ServeResponseAsync(context, CancellationToken.None);
+
+        // Assert
         context.AllowCacheStorage.Should().BeFalse();
     }
 
