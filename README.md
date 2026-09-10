@@ -1,11 +1,11 @@
 # User Management Technical Exercise
 
-[![CI](https://github.com/AntonioKoB/InfloTechTest/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AntonioKoB/InfloTechTest/actions/workflows/ci.yml)
+[![CI](https://github.com/AntonioKoB/InfloTechTest/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AntonioKoB/InfloTechTest/actions/workflows/ci.yml) [![CD](https://github.com/AntonioKoB/InfloTechTest/actions/workflows/cd.yml/badge.svg?branch=main)](https://github.com/AntonioKoB/InfloTechTest/actions/workflows/cd.yml)
 
 The exercise is an ASP.NET Core web application backed by Entity Framework Core, which faciliates management of some fictional users.
 We recommend that you use [Visual Studio (Community Edition)](https://visualstudio.microsoft.com/downloads) or [Visual Studio Code](https://code.visualstudio.com/Download) to run and modify the application. 
 
-**The UI has been re-implemented in Blazor talking to a REST API, so the solution now runs as two applications, and it uses SQL Server via Entity Framework Core migrations. See the [Documentation](#documentation) section below for the solution layout, how to run it, and how to set up a database to run it against.**
+**The UI has been re-implemented in Blazor talking to a REST API, so the solution now runs as two applications, and it uses SQL Server via Entity Framework Core migrations. See the [Documentation](#documentation) section below for the solution layout, how to run it, and how to set up a database to run it against. A development environment is deployed to Azure on every push to `main`: [app-inflo-blazor-dev-p5pupochhqltc.azurewebsites.net](https://app-inflo-blazor-dev-p5pupochhqltc.azurewebsites.net) (see [Live environment](#live-environment)).**
 
 ## The Exercise
 Complete as many of the tasks below as you feel comfortable with. These are split into 4 levels of difficulty 
@@ -393,6 +393,100 @@ az deployment group create --resource-group rg-inflo-dev --template-file infra/m
 ```
 
 The deployment is idempotent - running it again re-applies the template and reports no changes when nothing drifted - so a deployment pipeline runs it on every release before publishing the applications. `az bicep build` and `az bicep lint` validate the template offline, and the `what-if` above is the check to run before any change to it.
+
+## Continuous deployment
+
+Every push to `main` (and a manual run from the Actions tab) runs the `CD` workflow, `.github/workflows/cd.yml`. It re-applies the Bicep template and then publishes both applications to the sites the template created, so infrastructure and code always move together and a change to the template needs no separate step. The `CI` workflow still guards pull requests; `CD` repeats the build and the tests itself so nothing red is ever deployed.
+
+### Live environment
+
+The site names come from the template (`app-inflo-<app>-<env>-<suffix>`, the suffix derived from the resource group), so these addresses are stable across deployments. The Free tier unloads an idle app, so the first request after a quiet spell can take a while.
+
+| App | URL | Health |
+|---|---|---|
+| `UserManagement.Blazor` | https://app-inflo-blazor-dev-p5pupochhqltc.azurewebsites.net | [/health](https://app-inflo-blazor-dev-p5pupochhqltc.azurewebsites.net/health) |
+| `UserManagement.Api` | https://app-inflo-api-dev-p5pupochhqltc.azurewebsites.net | [/health](https://app-inflo-api-dev-p5pupochhqltc.azurewebsites.net/health) |
+
+### How the workflow logs in
+
+The workflow holds no Azure credential. It uses OpenID Connect: GitHub issues a short-lived token for the run, and an Entra app registration is configured to trust tokens whose subject is this repository's `main` branch. Entra exchanges that token for an Azure access token limited to what the app has been granted - Contributor on the one resource group. There is no client secret to store, rotate or leak, and a token from another branch or a fork is refused.
+
+### One-time bootstrap
+
+Done once per subscription from a shell logged in with `az login` and `gh auth login`, after the resource group and the three deployment values from [Deploying](#deploying) exist.
+
+1. The app registration and its service principal. The `appId` printed by the first command is the client id used below.
+
+    ```bash
+    az ad app create --display-name github-inflo-deploy --query appId -o tsv
+    az ad sp create --id <appId> --query id -o tsv
+    ```
+
+2. Contributor on the resource group and nothing else. If the command reports that the principal was not found, the directory has not replicated it yet: wait a minute and retry.
+
+    ```bash
+    az role assignment create --assignee-object-id <servicePrincipalObjectId> --assignee-principal-type ServicePrincipal --role Contributor --scope /subscriptions/<subscriptionId>/resourceGroups/rg-inflo-dev
+    ```
+
+3. The federated credential. The subject pins it to the `main` branch; the audience is the fixed value Azure expects. The JSON lives in a temporary file outside the repository.
+
+    ```json
+    {
+      "name": "github-main",
+      "issuer": "https://token.actions.githubusercontent.com",
+      "subject": "repo:AntonioKoB/InfloTechTest:ref:refs/heads/main",
+      "audiences": ["api://AzureADTokenExchange"]
+    }
+    ```
+
+    ```bash
+    az ad app federated-credential create --id <appId> --parameters federated-credential.json
+    ```
+
+4. The six repository secrets. The first three identify where to log in; the last three are the values the Bicep parameter file reads, mapped by the `infra` job onto environment variables of the same name.
+
+    | Secret | Value | Used by |
+    |---|---|---|
+    | `AZURE_CLIENT_ID` | the app registration's `appId` | `azure/login` in every job that touches Azure |
+    | `AZURE_TENANT_ID` | `az account show --query tenantId` | `azure/login` |
+    | `AZURE_SUBSCRIPTION_ID` | `az account show --query id` | `azure/login` |
+    | `SQL_ADMIN_LOGIN` | the SQL administrator login | the `infra` job, as `SQL_ADMIN_LOGIN` for `dev.bicepparam` |
+    | `SQL_ADMIN_PASSWORD` | the SQL administrator password | the `infra` job, as `SQL_ADMIN_PASSWORD` |
+    | `JWT_SIGNING_KEY` | the API's HS256 signing key | the `infra` job, as `JWT_SIGNING_KEY` |
+
+    ```bash
+    gh secret set AZURE_CLIENT_ID --body <appId>
+    gh secret set AZURE_TENANT_ID --body <tenantId>
+    gh secret set AZURE_SUBSCRIPTION_ID --body <subscriptionId>
+    gh secret set SQL_ADMIN_LOGIN
+    gh secret set SQL_ADMIN_PASSWORD
+    gh secret set JWT_SIGNING_KEY
+    ```
+
+    Without `--body` the command prompts for the value, so a secret never appears on a command line or in shell history. The last three must be the values the environment is already running with: the template writes the SQL password into the server and into the API's connection string on every run, so a different value is a password rotation rather than a deployment, and a different signing key invalidates every token already issued.
+
+### What a run does
+
+| Job | Waits for | What it does |
+|---|---|---|
+| `build` | - | Restore, Release build, the full test suite (results uploaded), then `dotnet publish` of both hosts, uploaded as the `api` and `blazor` artifacts |
+| `infra` | - | `azure/login`, then the same `az deployment group create` command as in [Deploying](#deploying), with the three secrets mapped onto the environment variables the parameter file reads. Exposes the template's `apiSiteName` and `blazorSiteName` outputs to the later jobs |
+| `deploy-api`, `deploy-blazor` | `build`, `infra` | Download the artifact and `azure/webapps-deploy` it to the site named by the `infra` output |
+| `smoke` | both deploys | `GET /health` on each site until it answers `200 Healthy`, for up to three minutes |
+
+`build` and `infra` run in parallel: the template is idempotent and independent of the code. Both deploy jobs wait for both, so a failing test or a failed template stops the run before any site changes. The workflow sets no app setting of its own. The template owns the complete set (see [What the template wires](#what-the-template-wires)), so whatever `main.bicep` declares is what the sites run with after every deployment, and a value edited in the portal does not survive the next run. Deployments are serialised through a concurrency group that never cancels: a second push queues behind the running deployment instead of interrupting it half way, and CI runs, which use their own group, cannot cancel a deployment either.
+
+### Smoke test
+
+Both applications expose `GET /health` ([Health checks](#health-checks)). The API's check opens the database, so a `Healthy` answer proves three things at once: the site started, the EF Core migration ran, and the connection string the template composed is right. The Blazor check proves that host is serving. The Free tier has no Always On, so the first request after a deployment can take tens of seconds while the app starts; the job polls every ten seconds for up to three minutes and fails the run if either site never answers.
+
+### Adding an environment
+
+Three additions and no change to the workflow's logic:
+
+1. a parameter file, `infra/<env>.bicepparam`, with its own `environmentName` (every resource name follows from it) and, if needed, its own hosting region;
+2. a federated credential whose subject names the trigger for that environment - for a GitHub environment with required reviewers, `repo:AntonioKoB/InfloTechTest:environment:<env>`; for a release branch, `ref:refs/heads/<branch>` - so a token minted for one environment cannot deploy another;
+3. a second entry for the `infra` and deploy jobs (a matrix over the environment name, or a copy with `environment: <env>` set) that passes the parameter file and the resource group for that environment. The secrets can stay repository-wide or move to GitHub environment secrets, which is what `environment:` on a job is for.
 
 ## Points to improve
 
