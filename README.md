@@ -407,6 +407,8 @@ The site names come from the template (`app-inflo-<app>-<env>-<suffix>`, the suf
 | `UserManagement.Blazor` | https://app-inflo-blazor-dev-p5pupochhqltc.azurewebsites.net | [/health](https://app-inflo-blazor-dev-p5pupochhqltc.azurewebsites.net/health) |
 | `UserManagement.Api` | https://app-inflo-api-dev-p5pupochhqltc.azurewebsites.net | [/health](https://app-inflo-api-dev-p5pupochhqltc.azurewebsites.net/health) |
 
+To sign in, use any of the seeded users listed under [Credentials](#credentials) with password `12345`; for example `ploew@example.com`. The same accounts work on a local run.
+
 ### How the workflow logs in
 
 The workflow holds no Azure credential. It uses OpenID Connect: GitHub issues a short-lived token for the run, and an Entra app registration is configured to trust tokens whose subject is this repository's `main` branch. Entra exchanges that token for an Azure access token limited to what the app has been granted - Contributor on the one resource group. There is no client secret to store, rotate or leak, and a token from another branch or a fork is refused.
@@ -434,10 +436,12 @@ Done once per subscription from a shell logged in with `az login` and `gh auth l
     {
       "name": "github-main",
       "issuer": "https://token.actions.githubusercontent.com",
-      "subject": "repo:AntonioKoB/InfloTechTest:ref:refs/heads/main",
+      "subject": "repo:AntonioKoB@52575552/InfloTechTest@1357388560:ref:refs/heads/main",
       "audiences": ["api://AzureADTokenExchange"]
     }
     ```
+
+    The subject carries the owner id and the repository id: repositories created after July 2026 get GitHub's immutable subject claim, so a recycled owner or repository name can never reuse the trust. The exact prefix for a repository is `gh api repos/<owner>/<repo>/actions/oidc/customization/sub`, and the `azure/login` step prints the subject it presented, which is the quickest way to spot a mismatch.
 
     ```bash
     az ad app federated-credential create --id <appId> --parameters federated-credential.json
@@ -485,7 +489,7 @@ Both applications expose `GET /health` ([Health checks](#health-checks)). The AP
 Three additions and no change to the workflow's logic:
 
 1. a parameter file, `infra/<env>.bicepparam`, with its own `environmentName` (every resource name follows from it) and, if needed, its own hosting region;
-2. a federated credential whose subject names the trigger for that environment - for a GitHub environment with required reviewers, `repo:AntonioKoB/InfloTechTest:environment:<env>`; for a release branch, `ref:refs/heads/<branch>` - so a token minted for one environment cannot deploy another;
+2. a federated credential whose subject names the trigger for that environment - for a GitHub environment with required reviewers, `repo:AntonioKoB@52575552/InfloTechTest@1357388560:environment:<env>`; for a release branch, the same prefix with `ref:refs/heads/<branch>` - so a token minted for one environment cannot deploy another;
 3. a second entry for the `infra` and deploy jobs (a matrix over the environment name, or a copy with `environment: <env>` set) that passes the parameter file and the resource group for that environment. The secrets can stay repository-wide or move to GitHub environment secrets, which is what `environment:` on a job is for.
 
 ## Points to improve
