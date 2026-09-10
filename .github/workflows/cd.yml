@@ -1,0 +1,179 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# The login to Azure is a federated (OIDC) credential: the job asks GitHub for an id token and Entra trusts it for
+# this repository's main branch, so no client secret is stored anywhere.
+permissions:
+  id-token: write
+  contents: read
+
+# One deployment at a time, and never cancelled: a second push queues behind the running deployment instead of
+# aborting it half way through. This group is separate from the CI workflow's, so CI runs never interfere.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build, test and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build --logger trx --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: TestResults/*.trx
+
+      - name: Publish API
+        run: dotnet publish UserManagement.Api --configuration Release --no-build --output publish/api
+
+      - name: Publish Blazor
+        run: dotnet publish UserManagement.Blazor --configuration Release --no-build --output publish/blazor
+
+      - name: Upload API package
+        uses: actions/upload-artifact@v7
+        with:
+          name: api
+          path: publish/api
+
+      - name: Upload Blazor package
+        uses: actions/upload-artifact@v7
+        with:
+          name: blazor
+          path: publish/blazor
+
+  infra:
+    name: Deploy infrastructure
+    runs-on: ubuntu-latest
+    outputs:
+      apiSiteName: ${{ steps.outputs.outputs.apiSiteName }}
+      blazorSiteName: ${{ steps.outputs.outputs.blazorSiteName }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # The parameter file reads the three secrets from these environment variables. The template owns every app
+      # setting and connection string on both sites, so nothing is configured from this workflow.
+      - name: Deploy Bicep template
+        env:
+          SQL_ADMIN_LOGIN: ${{ secrets.SQL_ADMIN_LOGIN }}
+          SQL_ADMIN_PASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
+          JWT_SIGNING_KEY: ${{ secrets.JWT_SIGNING_KEY }}
+        run: az deployment group create --resource-group rg-inflo-dev --template-file infra/main.bicep --parameters infra/dev.bicepparam
+
+      - name: Read deployment outputs
+        id: outputs
+        run: |
+          outputs=$(az deployment group show --resource-group rg-inflo-dev --name main --query properties.outputs --output json)
+          echo "apiSiteName=$(jq --raw-output '.apiSiteName.value' <<< "$outputs")" >> "$GITHUB_OUTPUT"
+          echo "blazorSiteName=$(jq --raw-output '.blazorSiteName.value' <<< "$outputs")" >> "$GITHUB_OUTPUT"
+
+  deploy-api:
+    name: Deploy API
+    needs: [build, infra]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download API package
+        uses: actions/download-artifact@v7
+        with:
+          name: api
+          path: api
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ needs.infra.outputs.apiSiteName }}
+          package: api
+
+  deploy-blazor:
+    name: Deploy Blazor
+    needs: [build, infra]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Blazor package
+        uses: actions/download-artifact@v7
+        with:
+          name: blazor
+          path: blazor
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ needs.infra.outputs.blazorSiteName }}
+          package: blazor
+
+  # Both apps expose GET /health. The API's check opens the database, so a Healthy answer proves the migration ran
+  # and the connection string works; the Blazor check proves the host is serving. The Free tier has no Always On,
+  # so the first request after a deployment can take a while: poll for up to three minutes.
+  smoke:
+    name: Smoke test
+    needs: [infra, deploy-api, deploy-blazor]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: API
+            site: ${{ needs.infra.outputs.apiSiteName }}
+          - app: Blazor
+            site: ${{ needs.infra.outputs.blazorSiteName }}
+    steps:
+      - name: Wait for ${{ matrix.app }} to report Healthy
+        run: |
+          url="https://${{ matrix.site }}.azurewebsites.net/health"
+          for attempt in $(seq 1 18); do
+            response=$(curl --silent --max-time 30 --write-out '\n%{http_code}' "$url" || true)
+            status=${response##*$'\n'}
+            body=${response%$'\n'*}
+            if [ "$status" = "200" ] && [ "$body" = "Healthy" ]; then
+              echo "$url answered Healthy on attempt $attempt."
+              exit 0
+            fi
+            echo "Attempt $attempt of 18: HTTP ${status:-no response}${body:+ - $body}. Retrying in 10 s."
+            sleep 10
+          done
+          echo "::error::$url did not answer Healthy within three minutes."
+          exit 1
