@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.OutputCaching;
 using UserManagement.Api.Contracts.Logs;
 using UserManagement.Api.Contracts.Users;
 using UserManagement.Api.Mapping;
@@ -14,12 +15,14 @@ public class UsersController : ControllerBase
     private readonly IUserService _userService;
     private readonly IUserLogService _userLogService;
     private readonly ICredentialService _credentialService;
+    private readonly IOutputCacheStore _outputCache;
 
-    public UsersController(IUserService userService, IUserLogService userLogService, ICredentialService credentialService)
+    public UsersController(IUserService userService, IUserLogService userLogService, ICredentialService credentialService, IOutputCacheStore outputCache)
     {
         _userService = userService;
         _userLogService = userLogService;
         _credentialService = credentialService;
+        _outputCache = outputCache;
     }
 
     [HttpGet]
