@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.OutputCaching;
+using UserManagement.Api.Caching;
 using UserManagement.Api.Contracts.Logs;
 using UserManagement.Api.Contracts.Users;
 using UserManagement.Api.Controllers;
@@ -456,6 +459,106 @@ public class UsersControllerTests
         result.Should().BeOfType<NoContentResult>();
     }
 
+    [Fact]
+    public async Task Create_WhenUserIsCreated_MustEvictTheUsersListCache()
+    {
+        // Arrange
+        var controller = CreateController();
+        var request = new CreateUserRequest
+        {
+            Forename = "Brand New",
+            Surname = "User",
+            Email = "brandnewuser@example.com",
+            DateOfBirth = new DateOnly(1995, 4, 12),
+            IsActive = true
+        };
+
+        // Act
+        await controller.Create(request);
+
+        // Assert
+        _outputCache.Verify(c => c.EvictByTagAsync(OutputCachingExtensions.UsersTag, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Create_WhenEmailAlreadyExists_MustNotEvictTheUsersListCache()
+    {
+        // Arrange
+        var controller = CreateController();
+        var request = new CreateUserRequest
+        {
+            Forename = "Brand New",
+            Surname = "User",
+            Email = "existing@example.com",
+            DateOfBirth = new DateOnly(1995, 4, 12),
+            IsActive = true
+        };
+        _userService.Setup(s => s.CreateAsync(It.IsAny<User>())).ThrowsAsync(new EmailAlreadyExistsException(request.Email));
+
+        // Act
+        await controller.Create(request);
+
+        // Assert
+        _outputCache.Verify(c => c.EvictByTagAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_WhenUserIsUpdated_MustEvictTheUsersListCache()
+    {
+        // Arrange
+        var controller = CreateController();
+        var user = SetupUser();
+        var request = new UpdateUserRequest
+        {
+            Forename = "Updated",
+            Surname = user.Surname,
+            Email = user.Email,
+            DateOfBirth = user.DateOfBirth,
+            IsActive = user.IsActive
+        };
+
+        // Act
+        await controller.Update(user.Id, request);
+
+        // Assert
+        _outputCache.Verify(c => c.EvictByTagAsync(OutputCachingExtensions.UsersTag, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Update_WhenUserDoesNotExist_MustNotEvictTheUsersListCache()
+    {
+        // Arrange
+        var controller = CreateController();
+        _userService.Setup(s => s.GetByIdAsync(999, It.IsAny<bool>())).ReturnsAsync((User?)null);
+        var request = new UpdateUserRequest
+        {
+            Forename = "X",
+            Surname = "Y",
+            Email = "x@example.com",
+            DateOfBirth = new DateOnly(1990, 1, 1),
+            IsActive = true
+        };
+
+        // Act
+        await controller.Update(999, request);
+
+        // Assert
+        _outputCache.Verify(c => c.EvictByTagAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Delete_WhenCalled_MustEvictTheUsersListCache()
+    {
+        // Arrange
+        var controller = CreateController();
+
+        // Act
+        await controller.Delete(5);
+
+        // Assert
+        _outputCache.Verify(c => c.EvictByTagAsync(OutputCachingExtensions.UsersTag, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     private User SetupUser(long id = 1, string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null)
     {
         var user = new User
@@ -536,5 +639,6 @@ public class UsersControllerTests
     private readonly Mock<IUserService> _userService = new();
     private readonly Mock<IUserLogService> _userLogService = new();
     private readonly Mock<ICredentialService> _credentialService = new();
-    private UsersController CreateController() => new(_userService.Object, _userLogService.Object, _credentialService.Object);
+    private readonly Mock<IOutputCacheStore> _outputCache = new();
+    private UsersController CreateController() => new(_userService.Object, _userLogService.Object, _credentialService.Object, _outputCache.Object);
 }

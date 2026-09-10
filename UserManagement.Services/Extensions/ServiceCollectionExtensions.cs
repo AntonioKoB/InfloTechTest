@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using UserManagement.Data;
 using UserManagement.Models;
+using UserManagement.Services.Caching;
 using UserManagement.Services.Domain.Implementations;
 using UserManagement.Services.Domain.Interfaces;
 
@@ -10,11 +11,14 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddDomainServices(this IServiceCollection services)
         => services
+            .AddMemoryCache()
+            .AddSingleton<ICache, MemoryCacheAdapter>()
             .AddScoped<UserService>()
             .AddScoped<IUserLogService, UserLogService>()
             .AddScoped<IUserLogDiffBuilder, UserLogDiffBuilder>()
+            // Auditing wraps caching on purpose: a read served from the cache is still recorded as a view.
             .AddScoped<IUserService>(sp => new AuditingUserService(
-                sp.GetRequiredService<UserService>(),
+                new CachingUserService(sp.GetRequiredService<UserService>(), sp.GetRequiredService<ICache>()),
                 sp.GetRequiredService<IUserLogService>(),
                 sp.GetRequiredService<IDataContext>()))
             .AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>()

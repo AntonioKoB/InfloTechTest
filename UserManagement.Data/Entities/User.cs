@@ -19,4 +19,8 @@ public class User
     // has been set yet (e.g. rows that existed before the column did), which cannot be used to sign in.
     [JsonIgnore]
     public string? PasswordHash { get; set; }
+
+    // The service-layer cache stores and hands out copies rather than the instance it was given, so a caller
+    // editing a fetched user in place before saving can never alter the cached one.
+    public User Clone() => (User)MemberwiseClone();
 }

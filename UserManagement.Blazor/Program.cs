@@ -33,6 +33,7 @@ builder.Services
         options.SlidingExpiration = false;
     });
 builder.Services.AddAuthorization();
+builder.Services.AddHealthChecks();
 builder.Services.AddCascadingAuthenticationState();
 
 var refitSettings = new RefitSettings
@@ -80,6 +81,10 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapAuthEndpoints();
+
+// Liveness only - this host has no database of its own; the API's /health covers that. Anonymous on
+// purpose: probes carry no token.
+app.MapHealthChecks("/health").AllowAnonymous();
 
 app.Run();
 

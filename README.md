@@ -150,7 +150,7 @@ Commit the generated files under `UserManagement.Data/Migrations` - they're appl
 
 ### 5. Production (Azure)
 
-Azure SQL is the intended production target - it's the same `Microsoft.EntityFrameworkCore.SqlServer` provider, so only the connection string changes, not the code. .NET User Secrets is a local-development-only mechanism (it's only loaded when `ASPNETCORE_ENVIRONMENT=Development`), so it plays no role in production. In Azure App Service, the equivalent is setting each value as an App Service Configuration entry - these surface to the app as environment variables, which ASP.NET Core's configuration system already reads automatically, so no code change is required. For stronger secret management (centralized rotation, RBAC-audited access) Azure Key Vault with a Managed Identity is a natural next step once a real deployment pipeline exists to attach it to.
+Azure SQL is the intended production target - it's the same `Microsoft.EntityFrameworkCore.SqlServer` provider, so only the connection string changes, not the code. .NET User Secrets is a local-development-only mechanism (it's only loaded when `ASPNETCORE_ENVIRONMENT=Development`), so it plays no role in production. In Azure App Service, the equivalent is setting each value as an App Service Configuration entry - these surface to the app as environment variables, which ASP.NET Core's configuration system already reads automatically, so no code change is required. For stronger secret management (centralized rotation, RBAC-audited access) Azure Key Vault with a Managed Identity is a natural next step once a real deployment pipeline exists to attach it to. The [Resiliency](#resiliency) section covers the two things an App Service deployment leans on beyond configuration: transient-fault retries against Azure SQL, and the `/health` endpoints for the platform's health probes.
 
 Everything each app needs beyond its committed `appsettings.json`:
 
@@ -238,10 +238,78 @@ On the API, `UsersController` and `LogsController` carry `[Authorize]` and `Auth
 
 `POST /api/auth/login` with `{ "email": "...", "password": "..." }` returns the token, its expiry and the user's display name; send the token as `Authorization: Bearer <token>` on every other request.
 
+#### Next steps
+
+Deliberate omissions, kept out to hold the scope to what the exercise asks for. Each is a small, self-contained change:
+
+- **Token revocation.** Tokens are stateless and stay valid until they expire. `ICredentialService.SignOutAsync` is the hook where a revocation list (or a shorter lifetime plus refresh tokens) would go; today it only records the audit entry.
+- **Hash upgrades on sign-in.** `PasswordHasher` reports `SuccessRehashNeeded` when a stored hash uses an older format or work factor; the result is accepted, but the hash is not rewritten.
+- **A "Password changed" audit label.** A password-only edit is recorded as an Updated entry with an empty diff, because the hash is never part of the snapshots. A dedicated action would make it readable in the log.
+- **An OpenAPI bearer security scheme**, so Scalar's "try it" can attach a token instead of only documenting the endpoints.
+- **A password policy.** The only rule is that a password is required; the seeded accounts use `12345` by design.
+
 ## Static assets
 
-`LigerShark.WebOptimizer.Core` bundled and minified the MVC application's Bootstrap and jQuery assets, and was removed along with that project. The Blazor app does not need an equivalent: its build pipeline already fingerprints and compresses static web assets, MudBlazor ships a single pre-minified CSS and JS file each, and Blazor's CSS isolation bundles all component-scoped styles into one generated stylesheet. There is no separate bundling step to configure.
+`LigerShark.WebOptimizer.Core` bundled and minified the MVC application's Bootstrap and jQuery assets, and was removed along with that project. The Blazor app does not need an equivalent. `app.MapStaticAssets()` in `UserManagement.Blazor/Program.cs` serves the static web assets the build has already fingerprinted and precompressed, and `App.razor` references them through `@Assets["..."]`, so each URL carries its content hash and can be cached indefinitely. MudBlazor ships a single pre-minified CSS and JS file each, and Blazor's CSS isolation bundles every component-scoped `.razor.css` into one generated `UserManagement.Blazor.styles.css`. The only hand-written stylesheet, `wwwroot/app.css`, is served compressed but not minified - it is one small file, so a minifier would be a build step for nothing. There is no separate bundling step to configure.
 
-## API client resiliency (Blazor)
+## Resiliency
 
-The Blazor app's calls to `UserManagement.Api` (via the `IUsersApi`/`ILogsApi` Refit clients) go through [`Microsoft.Extensions.Http.Resilience`](https://learn.microsoft.com/dotnet/core/resilience/http-resilience) - Microsoft's own resilience package, built on [Polly](https://github.com/App-vNext/Polly) v8. It's wired in `UserManagement.Blazor/Program.cs` via `.AddStandardResilienceHandler()` on each `HttpClient`, which bundles retry (with exponential backoff), a per-attempt and total-request timeout, a circuit breaker, and a concurrency rate limiter in one call, rather than hand-wiring individual Polly policies.
+### API client (Blazor)
+
+The Blazor app's calls to `UserManagement.Api` (via the `IAuthApi`, `IUsersApi` and `ILogsApi` Refit clients) go through [`Microsoft.Extensions.Http.Resilience`](https://learn.microsoft.com/dotnet/core/resilience/http-resilience) - Microsoft's own resilience package, built on [Polly](https://github.com/App-vNext/Polly) v8. It's wired in `UserManagement.Blazor/Program.cs` via `.AddStandardResilienceHandler()` on each `HttpClient`, which bundles retry (with exponential backoff), a per-attempt and total-request timeout, a circuit breaker, and a concurrency rate limiter in one call, rather than hand-wiring individual Polly policies.
+
+### API to database
+
+The API's SQL Server provider is registered with `EnableRetryOnFailure` (`AddDataAccess`, in `UserManagement.Data`), which runs every query and `SaveChanges` under EF Core's retrying execution strategy. It retries only the error numbers the provider classifies as transient - the throttling, failover and dropped-connection faults a hosted database such as Azure SQL is documented to raise - and never a genuine failure like a constraint violation. The budget is three retries with an exponential backoff capped at five seconds, roughly nine seconds worst case, chosen to sit inside the Blazor client's ten-second per-attempt timeout: the client already retries, so the API giving up quickly on a request avoids both layers retrying on top of each other. The startup `Database.Migrate()` call runs under the same strategy, so a database that is still waking up when the API starts is retried rather than crashing the process. Nothing in the data layer opens a user-initiated transaction, so no `CreateExecutionStrategy().ExecuteAsync(...)` wrapping is required.
+
+There is deliberately no circuit breaker between the API and the database. A breaker earns its place where there is somewhere else to send the traffic, or a cheaper failure to fall back to - the Blazor app's breaker fails fast to an error message instead of hanging a circuit. In front of the only database there is no fallback: a breaker would turn a slow database into a hard outage for the duration of the break, which is worse than a bounded retry.
+
+For Azure SQL specifically, EF Core also offers `UseAzureSql()` in place of `UseSqlServer()`; it supersedes the now-obsolete `UseAzureSqlDefaults`, whose defaults are documented as "including retries on errors". Switching is a one-line change in `AddDataAccess` once the deployment target is confirmed as Azure SQL.
+
+### Health checks
+
+Both hosts expose `GET /health` for the platform's health probes (App Service's Health check feature, a load balancer, a container orchestrator). The endpoints are anonymous on purpose - probes carry no token - and return plain text: `Healthy` with a 200, or `Unhealthy` with a 503.
+
+- `UserManagement.Api` (`https://localhost:7085/health` locally) includes a database connectivity check (`AddDbContextCheck<DataContext>`), so a process that is up but cannot reach its database reports as down and can be taken out of rotation.
+- `UserManagement.Blazor` (`https://localhost:7086/health` locally) is a liveness check only. The host has no database of its own; its dependency on the API is already covered by the API's probe and by the client-side circuit breaker above.
+
+In App Service, set each site's Health check path to `/health`.
+
+## Caching
+
+Two reads are cached, each with the cache that matches the kind of read it is. A read with no side effect is cached at the HTTP layer, the cheapest place to serve it from. A read that is audited is cached beneath the audit, in the service layer, so a hit is still recorded. Everything else goes to the database every time.
+
+### The users list: output caching
+
+`GET /api/users` is served through ASP.NET Core output caching under a named policy (`OutputCachingExtensions`, in `UserManagement.Api/Caching`). Each `filter` value is its own cached response, every entry is tagged `users`, and a successful `POST`, `PUT` or `DELETE` on users evicts the tag before it returns, so an edit that moves a user between the Active and Non-active lists is correct on the very next request. A write that changed nothing (a duplicate email, an update of a missing user) leaves the cache alone. A five-minute expiry backs the eviction, so anything that writes to the database around the API self-heals, and the store's size limit bounds the memory used.
+
+Output caching refuses to cache any request that carries an `Authorization` header, and refuses again after the response when the user turned out to be authenticated - the safe assumption that an authenticated response is personal. The users list is the same for every signed-in caller, so `CacheAuthenticatedRequestsPolicy`, appended to that one policy, opts it back in under the framework's other rules (a GET, a 200, no cookie). Nothing else in the API is output-cached, and `UseOutputCache` sits after authorization, so an unauthenticated caller still gets a 401 and never a cached body.
+
+### A single user: a service-layer cache
+
+The single-user read is audited: expanding a row in the UI calls `GET /api/users/{id}?recordAsViewed=true`, and the "Viewed" entry is written by the auditing decorator around `IUserService`. An HTTP cache cannot serve that request without skipping the audit, so its cache is `CachingUserService`, a second decorator placed *beneath* the auditing one: `Auditing(Caching(UserService))`. A hit is served from memory and still recorded as a view; the composition test in `ServiceCollectionExtensionsTests` pins that order.
+
+The decorator caches a user by id for five minutes and hands out copies, never the cached instance, because the API's update flow edits the fetched user in place before saving it. Update and Delete invalidate that user whether or not they succeed - a failed save can mean the row changed or vanished underneath, and the cost is one extra read. Misses are not remembered, since an id that does not exist now may after the next create. The lists (cached above), the email lookup (uniqueness checks and sign-in must see the database) and the logs (append-only, changing on every audited action) pass straight through.
+
+The decorator depends on `ICache`, a three-method contract (`GetAsync`, `SetAsync` with a time-to-live, `RemoveAsync`) implemented by `MemoryCacheAdapter` over the framework's in-process `IMemoryCache`. Swapping the store means one new adapter and one registration line.
+
+### Two invalidation paths, on purpose
+
+`Update` and `Delete` therefore invalidate in two places: the controller evicts the list tag, and the decorator removes the user's key. They sit side by side deliberately - each cache is invalidated by the layer that owns it - and the boundary between them is the rule at the top of this section.
+
+### Production: Redis
+
+Both stores are in-process today, which is right for a single instance and wrong for a scaled-out App Service, where each instance would evict only itself. Both have a drop-in distributed replacement, and nothing in the policies, the controller or the decorator changes:
+
+- The output cache: add `Microsoft.AspNetCore.OutputCaching.StackExchangeRedis` and call `AddStackExchangeRedisOutputCache` next to `AddOutputCache`, with the connection string and an `InstanceName` key prefix. Tag eviction then works across instances.
+- The user cache: a `RedisCacheAdapter : ICache` over `IDistributedCache` (`Microsoft.Extensions.Caching.StackExchangeRedis`), registered in place of `MemoryCacheAdapter`. It must serialize the whole entity: `User.PasswordHash` is `[JsonIgnore]`d for the audit snapshots, so the default JSON contract would silently drop it from cached users and a later update would save it back as null.
+
+In Azure both point at Azure Cache for Redis. `ConnectionStrings:Redis` would join the connection string and the signing key in user secrets locally and in App Service configuration in production, and `Microsoft.Azure.StackExchangeRedis` adds Entra ID authentication with a managed identity once the Key Vault direction is taken.
+
+## Points to improve
+
+Known gaps, in the order they would be tackled:
+
+1. **Paginate the users list.** `GET /api/users` returns every row for the chosen filter, which is fine at the seeded size and not at scale. The Logs page already pages server-side (`GetPageAsync`), so the pattern exists: the users endpoint would take `page` and `pageSize`, the Blazor list would gain the same controls the Logs page has, and the output cache needs no change, since its key already varies by every query parameter and each page becomes its own bounded entry.
+2. **Distributed cache stores** for a multi-instance deployment, as described under [Caching](#caching).
+3. **Pin the Blazor client's resilience wiring with a test.** The named `HttpClient` that carries `AddStandardResilienceHandler` and the handler the authenticated Refit clients are built from are matched by name (`nameof(IUsersApi)`); a rename would silently drop the retries, and nothing catches it today. Lifting the client factory out of `Program.cs` into a testable extension would let a test resolve `IUsersApi` and assert the handler chain.

@@ -1,3 +1,6 @@
+using System.Threading;
+using Microsoft.AspNetCore.OutputCaching;
+using UserManagement.Api.Caching;
 using UserManagement.Api.Contracts.Logs;
 using UserManagement.Api.Contracts.Users;
 using UserManagement.Api.Mapping;
@@ -14,15 +17,18 @@ public class UsersController : ControllerBase
     private readonly IUserService _userService;
     private readonly IUserLogService _userLogService;
     private readonly ICredentialService _credentialService;
+    private readonly IOutputCacheStore _outputCache;
 
-    public UsersController(IUserService userService, IUserLogService userLogService, ICredentialService credentialService)
+    public UsersController(IUserService userService, IUserLogService userLogService, ICredentialService credentialService, IOutputCacheStore outputCache)
     {
         _userService = userService;
         _userLogService = userLogService;
         _credentialService = credentialService;
+        _outputCache = outputCache;
     }
 
     [HttpGet]
+    [OutputCache(PolicyName = OutputCachingExtensions.UsersListPolicy)]
     public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers(UserListFilter filter = UserListFilter.All)
     {
         var users = filter switch
@@ -66,6 +72,7 @@ public class UsersController : ControllerBase
             return EmailConflict(ex);
         }
 
+        await EvictUsersListAsync();
         return CreatedAtAction(nameof(GetById), new { id = user.Id }, user.ToDto());
     }
 
@@ -94,6 +101,7 @@ public class UsersController : ControllerBase
             return NotFound();
         }
 
+        await EvictUsersListAsync();
         return Ok(user.ToDto());
     }
 
@@ -101,6 +109,7 @@ public class UsersController : ControllerBase
     public async Task<IActionResult> Delete(long id)
     {
         await _userService.DeleteAsync(id);
+        await EvictUsersListAsync();
         return NoContent();
     }
 
@@ -109,4 +118,10 @@ public class UsersController : ControllerBase
         ModelState.AddModelError(nameof(UserDto.Email), ex.Message);
         return ValidationProblem(ModelState);
     }
+
+    // Called after a write has succeeded. The cached list must go even if the caller has disconnected by now,
+    // so this deliberately ignores the request's cancellation token. The single-user cache is invalidated by
+    // the service layer, where that read is cached.
+    private Task EvictUsersListAsync()
+        => _outputCache.EvictByTagAsync(OutputCachingExtensions.UsersTag, CancellationToken.None).AsTask();
 }
