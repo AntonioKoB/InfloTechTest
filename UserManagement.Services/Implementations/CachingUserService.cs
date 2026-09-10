@@ -9,15 +9,62 @@ namespace UserManagement.Services.Domain.Implementations;
 
 public class CachingUserService : IUserService
 {
+    private static readonly TimeSpan TimeToLive = TimeSpan.FromMinutes(5);
+
+    private readonly IUserService _inner;
+    private readonly ICache _cache;
+
     public CachingUserService(IUserService inner, ICache cache)
     {
+        _inner = inner;
+        _cache = cache;
     }
 
-    public Task<IEnumerable<User>> FilterByActiveAsync(bool isActive) => throw new NotImplementedException();
-    public Task<IEnumerable<User>> GetAllAsync() => throw new NotImplementedException();
-    public Task<User?> GetByIdAsync(long id, bool recordAsViewed = false) => throw new NotImplementedException();
-    public Task<User?> GetByEmailAsync(string email) => throw new NotImplementedException();
-    public Task CreateAsync(User user) => throw new NotImplementedException();
-    public Task UpdateAsync(User user) => throw new NotImplementedException();
-    public Task DeleteAsync(long id) => throw new NotImplementedException();
+    public Task<IEnumerable<User>> FilterByActiveAsync(bool isActive) => _inner.FilterByActiveAsync(isActive);
+    public Task<IEnumerable<User>> GetAllAsync() => _inner.GetAllAsync();
+    public Task<User?> GetByEmailAsync(string email) => _inner.GetByEmailAsync(email);
+    public Task CreateAsync(User user) => _inner.CreateAsync(user);
+
+    public async Task<User?> GetByIdAsync(long id, bool recordAsViewed = false)
+    {
+        var cached = await _cache.GetAsync<User>(Key(id));
+        if (cached is not null)
+        {
+            return cached.Clone();
+        }
+
+        var user = await _inner.GetByIdAsync(id, recordAsViewed);
+        if (user is not null)
+        {
+            await _cache.SetAsync(Key(id), user.Clone(), TimeToLive);
+        }
+
+        return user;
+    }
+
+    public async Task UpdateAsync(User user)
+    {
+        try
+        {
+            await _inner.UpdateAsync(user);
+        }
+        finally
+        {
+            await _cache.RemoveAsync(Key(user.Id));
+        }
+    }
+
+    public async Task DeleteAsync(long id)
+    {
+        try
+        {
+            await _inner.DeleteAsync(id);
+        }
+        finally
+        {
+            await _cache.RemoveAsync(Key(id));
+        }
+    }
+
+    private static string Key(long id) => $"users:{id}";
 }
