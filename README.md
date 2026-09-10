@@ -1,5 +1,7 @@
 # User Management Technical Exercise
 
+[![CI](https://github.com/AntonioKoB/InfloTechTest/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AntonioKoB/InfloTechTest/actions/workflows/ci.yml)
+
 The exercise is an ASP.NET Core web application backed by Entity Framework Core, which faciliates management of some fictional users.
 We recommend that you use [Visual Studio (Community Edition)](https://visualstudio.microsoft.com/downloads) or [Visual Studio Code](https://code.visualstudio.com/Download) to run and modify the application. 
 
@@ -305,6 +307,20 @@ Both stores are in-process today, which is right for a single instance and wrong
 - The user cache: a `RedisCacheAdapter : ICache` over `IDistributedCache` (`Microsoft.Extensions.Caching.StackExchangeRedis`), registered in place of `MemoryCacheAdapter`. It must serialize the whole entity: `User.PasswordHash` is `[JsonIgnore]`d for the audit snapshots, so the default JSON contract would silently drop it from cached users and a later update would save it back as null.
 
 In Azure both point at Azure Cache for Redis. `ConnectionStrings:Redis` would join the connection string and the signing key in user secrets locally and in App Service configuration in production, and `Microsoft.Azure.StackExchangeRedis` adds Entra ID authentication with a managed identity once the Key Vault direction is taken.
+
+## Continuous integration
+
+Every pull request, and every push to `main`, runs the `CI` workflow (`.github/workflows/ci.yml`) on GitHub Actions. It restores the solution, builds it in Release and runs all four test projects. `Directory.Build.props` sets `TreatWarningsAsErrors`, so the build step is also the lint: a new warning anywhere in the solution fails the run. The tests need no database - `UserManagement.Data.Tests` runs `DataContext` on EF Core's InMemory provider and everything above the data layer is mocked - so there is no SQL Server service container to provision or keep in step with production. There is no `global.json`; the workflow pins the SDK line (`10.0.x`) itself.
+
+A newer push to the same branch cancels the run it supersedes (`concurrency` with `cancel-in-progress`), so a pull request only ever has one run in flight. The test results are uploaded as a `test-results` artifact (one `.trx` per test project) whether the run passes or fails, so a failure can be diagnosed from the run page without reproducing it locally. The badge at the top of this file tracks the latest run on `main`.
+
+The workflow runs exactly what a local build does, so the same three commands reproduce it from the repository root:
+
+```bash
+dotnet restore
+dotnet build --configuration Release --no-restore
+dotnet test --configuration Release --no-build
+```
 
 ## Points to improve
 
