@@ -73,8 +73,8 @@ Add additional layers to the application that will ensure that it is scaleable w
 | Project | Purpose |
 |---|---|
 | `UserManagement.Data` | EF Core `DataContext`, entities and migrations. |
-| `UserManagement.Services` | Domain services (`IUserService`, `IUserLogService`, audit-log decorator, diff builder). |
-| `UserManagement.Api` | REST API over the domain services. Owns all database access. |
+| `UserManagement.Services` | Domain services (`IUserService`, `IUserLogService`, audit-log decorator, diff builder), the commands and their handlers, the message bus and the command status store. |
+| `UserManagement.Api` | REST API over the domain services, and the worker that executes commands. Owns all database access. |
 | `UserManagement.Api.Contracts` | DTOs and enums making up the API's public contract. Referenced by both the API and its clients, and deliberately free of any ASP.NET Core dependency. |
 | `UserManagement.Blazor` | Blazor Server UI. Talks to the API over HTTP and never touches the service or data layers directly. |
 
@@ -283,7 +283,7 @@ Two reads are cached, each with the cache that matches the kind of read it is. A
 
 ### The users list: output caching
 
-`GET /api/users` is served through ASP.NET Core output caching under a named policy (`OutputCachingExtensions`, in `UserManagement.Api/Caching`). Each `filter` value is its own cached response, every entry is tagged `users`, and a successful `POST`, `PUT` or `DELETE` on users evicts the tag before it returns, so an edit that moves a user between the Active and Non-active lists is correct on the very next request. A write that changed nothing (a duplicate email, an update of a missing user) leaves the cache alone. A five-minute expiry backs the eviction, so anything that writes to the database around the API self-heals, and the store's size limit bounds the memory used.
+`GET /api/users` is served through ASP.NET Core output caching under a named policy (`OutputCachingExtensions`, in `UserManagement.Api/Caching`). Each `filter` value is its own cached response, every entry is tagged `users`, and the worker evicts the tag the moment a create, update or delete command completes (see [Message bus and worker](#message-bus-and-worker)), so an edit that moves a user between the Active and Non-active lists is correct as soon as the command is. A command that failed (a duplicate email, a user that vanished) changed nothing and leaves the cache alone. A five-minute expiry backs the eviction, so anything that writes to the database around the API self-heals, and the store's size limit bounds the memory used.
 
 Output caching refuses to cache any request that carries an `Authorization` header, and refuses again after the response when the user turned out to be authenticated - the safe assumption that an authenticated response is personal. The users list is the same for every signed-in caller, so `CacheAuthenticatedRequestsPolicy`, appended to that one policy, opts it back in under the framework's other rules (a GET, a 200, no cookie). Nothing else in the API is output-cached, and `UseOutputCache` sits after authorization, so an unauthenticated caller still gets a 401 and never a cached body.
 
@@ -297,11 +297,11 @@ The decorator depends on `ICache`, a three-method contract (`GetAsync`, `SetAsyn
 
 ### Two invalidation paths, on purpose
 
-`Update` and `Delete` therefore invalidate in two places: the controller evicts the list tag, and the decorator removes the user's key. They sit side by side deliberately - each cache is invalidated by the layer that owns it - and the boundary between them is the rule at the top of this section.
+An update or a delete therefore invalidates in two places: the worker evicts the list tag when the command completes, and the decorator removes the user's key as the handler writes through it. They sit side by side deliberately - each cache is invalidated by the layer that owns it - and the boundary between them is the rule at the top of this section. Both happen when the row actually changes, never when the API merely accepts the request.
 
 ### Production: Redis
 
-Both stores are in-process today, which is right for a single instance and wrong for a scaled-out App Service, where each instance would evict only itself. Both have a drop-in distributed replacement, and nothing in the policies, the controller or the decorator changes:
+Both stores are in-process today, which is right for a single instance and wrong for a scaled-out App Service, where each instance would evict only itself. Both have a drop-in distributed replacement, and nothing in the policies, the worker or the decorator changes:
 
 - The output cache: add `Microsoft.AspNetCore.OutputCaching.StackExchangeRedis` and call `AddStackExchangeRedisOutputCache` next to `AddOutputCache`, with the connection string and an `InstanceName` key prefix. Tag eviction then works across instances.
 - The user cache: a `RedisCacheAdapter : ICache` over `IDistributedCache` (`Microsoft.Extensions.Caching.StackExchangeRedis`), registered in place of `MemoryCacheAdapter`. It must serialize the whole entity: `User.PasswordHash` is `[JsonIgnore]`d for the audit snapshots, so the default JSON contract would silently drop it from cached users and a later update would save it back as null.
@@ -514,12 +514,15 @@ Unhandled exceptions are recorded by the framework with no code of this project'
 | Event | Where | Level |
 |---|---|---|
 | Login rejected (the email, never the password) | API `AuthController`, Blazor `AuthEndpoints` | Warning |
-| Email already in use on a create or an update | API `UsersController` | Warning |
-| User no longer exists when an update is saved | API `UsersController` | Warning |
+| A command failed in the worker (its type, its id and the reason - a duplicate email, a user that no longer exists - with the exception) | API `CommandWorker` | Warning |
 | The API rejected the session token (method and path, never the token) | Blazor `BearerTokenHandler` | Warning |
 | The API rejected the logout; signed out locally anyway | Blazor `AuthEndpoints` | Warning |
 | Antiforgery validation failed on a login or logout post | Blazor `AuthEndpoints` | Warning |
-| User or log entry not found by id | API `UsersController`, `LogsController` | Information |
+| The worker's consume loop faulted (the exception); the host stops so the process is restarted | API `CommandWorker` | Error |
+| User, log entry or command not found by id | API `UsersController`, `LogsController`, `CommandsController` | Information |
+| The worker stopped with the host | API `CommandWorker` | Information |
+
+The worker runs outside any request, so its SQL commands and its log lines appear as their own operations rather than under the request that accepted the command.
 
 ### Where to look
 
@@ -537,10 +540,44 @@ A local run sends nothing. Without `APPLICATIONINSIGHTS_CONNECTION_STRING` the S
 
 Ingestion is free for the first 5 GB per month per workspace, and the workspace's daily cap (see [Infrastructure](#infrastructure)) keeps this environment well inside that. Ninety days of retention are included.
 
+## Message bus and worker
+
+Writes to users are not executed inside the HTTP request. The API validates the request, turns it into a command, puts the command on a bus and answers **202 Accepted**; a worker hosted in the API process takes commands off the bus and executes them. Reads are untouched, and stay behind the caches described above.
+
+### The command flow
+
+1. `POST /api/users`, `PUT /api/users/{id}` and `DELETE /api/users/{id}` publish a `CreateUserCommand`, `UpdateUserCommand` or `DeleteUserCommand` (`UserManagement.Services/Commands`) and return `202 Accepted` with `{ "commandId": "…" }` in the body and a `Location` header pointing at `GET /api/commands/{commandId}`. The command is marked Pending before it is published, so the worker can never finish before the mark is written.
+2. `CommandWorker` (`UserManagement.Api/Commands`), a `BackgroundService`, consumes `IMessageBus` in order. Each command runs in its own dependency-injection scope through the `ICommandHandler<TCommand>` registered for its type. The handlers write through the same `IUserService` the API used to call directly, so the uniqueness check and the single-user cache behave exactly as before, and each returns the id of the user it affected.
+3. The outcome lands in `ICommandStatusStore`: Completed with that user id, or Failed with the exception message. A handler that throws never stops the worker; the failure is logged with the exception (event 1401, see [Observability](#observability)) and the next command is taken.
+4. The audit log takes the same road. `IUserLogService.RecordAsync` builds the finished `UserLog` entry - snapshots serialized at the moment of the action - and publishes it as a `RecordUserLogCommand`; `RecordUserLogCommandHandler` writes it. Every entry (Created, Updated, Deleted, Viewed, LoggedIn, LoggedOut) is therefore written off the request path, and a user write and its log entry are decoupled from each other as well as from the request.
+
+### The status endpoint
+
+`GET /api/commands/{id}` answers `200` with
+
+```json
+{ "commandId": "…", "state": "Pending", "userId": null, "error": null }
+```
+
+where `state` is `Pending`, `Completed` or `Failed`. `userId` is set once the command completed and is the only place a created user's id appears; `error` carries the reason when it failed, and a duplicate email - the usual failure - reads `A user with email '…' already exists.`. An unknown id is a `404`.
+
+### What stays synchronous
+
+Model validation: an invalid body is a `400` immediately, as before. The caller made a mistake it can fix now, and there is nothing to queue. For the same reason `PUT` still checks that the user exists (`404`), and the password is hashed inside the request so that the command carries the hash and the clear-text password never reaches a transport. Everything that touches the database on a write happens in the worker.
+
+The Blazor UI treats a `202` as accepted: after an add it reloads the list it is showing, and an edited row shows the values that were typed.
+
+### Cost, and the limits that come with it
+
+The in-memory transport (`InMemoryMessageBus`, a `System.Threading.Channels` channel) and the in-memory status store (`InMemoryCommandStatusStore`, a `ConcurrentDictionary`) were chosen purely for cost: they need no Azure resource and add nothing to the bill. They are not durable across restarts and not shared across instances - a command accepted just before a restart is lost, and an instance only knows about the commands it accepted itself. Neither bites on a single free-tier instance, which is what the template deploys. A production deployment would use Azure Service Bus behind the same `IMessageBus` interface, so that the worker can move to its own host and scale independently of the API, and a table behind `ICommandStatusStore`, so that statuses survive restarts, are visible from every instance and can expire (the dictionary never forgets an entry).
+
+There is no outbox either. Marking a command Pending and publishing it, and writing a user and publishing its log entry, are each two operations rather than one transaction. The in-memory bus makes that harmless, since a publish cannot fail except at shutdown; a broker would not. The command table is where an outbox lands: the row inserted when the API accepts a command is both its durable queue entry and the status the caller polls, written in the same transaction as any business change, with the worker or a relay reading from it.
+
 ## Points to improve
 
 Known gaps, in the order they would be tackled:
 
 1. **Paginate the users list.** `GET /api/users` returns every row for the chosen filter, which is fine at the seeded size and not at scale. The Logs page already pages server-side (`GetPageAsync`), so the pattern exists: the users endpoint would take `page` and `pageSize`, the Blazor list would gain the same controls the Logs page has, and the output cache needs no change, since its key already varies by every query parameter and each page becomes its own bounded entry.
-2. **Distributed cache stores** for a multi-instance deployment, as described under [Caching](#caching).
-3. **Pin the Blazor client's resilience wiring with a test.** The named `HttpClient` that carries `AddStandardResilienceHandler` and the handler the authenticated Refit clients are built from are matched by name (`nameof(IUsersApi)`); a rename would silently drop the retries, and nothing catches it today. Lifting the client factory out of `Program.cs` into a testable extension would let a test resolve `IUsersApi` and assert the handler chain.
+2. **A durable transport and status store** - Azure Service Bus behind `IMessageBus` and a table behind `ICommandStatusStore` - as described under [Message bus and worker](#message-bus-and-worker).
+3. **Distributed cache stores** for a multi-instance deployment, as described under [Caching](#caching).
+4. **Pin the Blazor client's resilience wiring with a test.** The named `HttpClient` that carries `AddStandardResilienceHandler` and the handler the authenticated Refit clients are built from are matched by name (`nameof(IUsersApi)`); a rename would silently drop the retries, and nothing catches it today. Lifting the client factory out of `Program.cs` into a testable extension would let a test resolve `IUsersApi` and assert the handler chain.

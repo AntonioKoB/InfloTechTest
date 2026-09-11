@@ -12,7 +12,7 @@ namespace UserManagement.Blazor.Components.Users;
 public partial class AddUserModal
 {
     [Parameter] public bool Visible { get; set; }
-    [Parameter] public EventCallback<UserDto> OnSaved { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
     [Parameter] public EventCallback OnCancelled { get; set; }
 
     [Inject] private IUsersApi UsersApi { get; set; } = default!;
@@ -27,7 +27,7 @@ public partial class AddUserModal
 
         try
         {
-            var created = await UsersApi.CreateUserAsync(new CreateUserRequest
+            await UsersApi.CreateUserAsync(new CreateUserRequest
             {
                 Forename = _model.Forename,
                 Surname = _model.Surname,
@@ -39,7 +39,7 @@ public partial class AddUserModal
 
             _model = new();
             Snackbar.Add("User created successfully", Severity.Success);
-            await OnSaved.InvokeAsync(created);
+            await OnSaved.InvokeAsync();
         }
         catch (ApiException ex) when (ex.StatusCode == HttpStatusCode.BadRequest)
         {

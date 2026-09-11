@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Scalar.AspNetCore;
 using UserManagement.Api.Auth;
 using UserManagement.Api.Caching;
+using UserManagement.Api.Commands;
 using UserManagement.Api.Health;
 using UserManagement.Api.Telemetry;
 using UserManagement.Data;
@@ -18,6 +19,7 @@ builder.Services
     .AddJwtAuthentication(builder.Configuration, builder.Environment)
     .AddApiHealthChecks()
     .AddApiOutputCaching()
+    .AddCommandWorker()
     .AddApiTelemetry(builder.Configuration);
 
 builder.Services

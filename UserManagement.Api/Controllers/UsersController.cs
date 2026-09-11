@@ -1,12 +1,13 @@
-using System.Threading;
 using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.Extensions.Logging;
 using UserManagement.Api.Caching;
+using UserManagement.Api.Contracts.Commands;
 using UserManagement.Api.Contracts.Logs;
 using UserManagement.Api.Contracts.Users;
 using UserManagement.Api.Mapping;
-using UserManagement.Services.Domain.Exceptions;
+using UserManagement.Services.Commands;
 using UserManagement.Services.Domain.Interfaces;
+using UserManagement.Services.Messaging;
 
 namespace UserManagement.Api.Controllers;
 
@@ -18,15 +19,17 @@ public partial class UsersController : ControllerBase
     private readonly IUserService _userService;
     private readonly IUserLogService _userLogService;
     private readonly ICredentialService _credentialService;
-    private readonly IOutputCacheStore _outputCache;
+    private readonly IMessageBus _messageBus;
+    private readonly ICommandStatusStore _statusStore;
     private readonly ILogger<UsersController> _logger;
 
-    public UsersController(IUserService userService, IUserLogService userLogService, ICredentialService credentialService, IOutputCacheStore outputCache, ILogger<UsersController> logger)
+    public UsersController(IUserService userService, IUserLogService userLogService, ICredentialService credentialService, IMessageBus messageBus, ICommandStatusStore statusStore, ILogger<UsersController> logger)
     {
         _userService = userService;
         _userLogService = userLogService;
         _credentialService = credentialService;
-        _outputCache = outputCache;
+        _messageBus = messageBus;
+        _statusStore = statusStore;
         _logger = logger;
     }
 
@@ -64,27 +67,18 @@ public partial class UsersController : ControllerBase
         return Ok(logs.Select(l => l.ToDto()));
     }
 
+    // The three writes are accepted here and executed by the worker; see AcceptAsync.
+
     [HttpPost]
-    public async Task<ActionResult<UserDto>> Create(CreateUserRequest request)
+    public async Task<ActionResult<CommandAcceptedResponse>> Create(CreateUserRequest request)
     {
         var user = request.ToUser();
         _credentialService.SetPassword(user, request.Password);
-
-        try
-        {
-            await _userService.CreateAsync(user);
-        }
-        catch (EmailAlreadyExistsException ex)
-        {
-            return EmailConflict(ex);
-        }
-
-        await EvictUsersListAsync();
-        return CreatedAtAction(nameof(GetById), new { id = user.Id }, user.ToDto());
+        return await AcceptAsync(user.ToCreateCommand(Guid.NewGuid()));
     }
 
     [HttpPut("{id:long}")]
-    public async Task<ActionResult<UserDto>> Update(long id, UpdateUserRequest request)
+    public async Task<ActionResult<CommandAcceptedResponse>> Update(long id, UpdateUserRequest request)
     {
         var user = await _userService.GetByIdAsync(id);
         if (user is null)
@@ -94,58 +88,32 @@ public partial class UsersController : ControllerBase
         }
 
         request.ApplyTo(user);
+        string? passwordHash = null;
         if (!string.IsNullOrEmpty(request.Password))
         {
             _credentialService.SetPassword(user, request.Password);
+            passwordHash = user.PasswordHash;
         }
 
-        try
-        {
-            await _userService.UpdateAsync(user);
-        }
-        catch (EmailAlreadyExistsException ex)
-        {
-            return EmailConflict(ex);
-        }
-        catch (UserNoLongerExistsException)
-        {
-            LogUserNoLongerExists(id);
-            return NotFound();
-        }
-
-        await EvictUsersListAsync();
-        return Ok(user.ToDto());
+        return await AcceptAsync(user.ToUpdateCommand(Guid.NewGuid(), passwordHash));
     }
 
     [HttpDelete("{id:long}")]
-    public async Task<IActionResult> Delete(long id)
-    {
-        await _userService.DeleteAsync(id);
-        await EvictUsersListAsync();
-        return NoContent();
-    }
+    public async Task<ActionResult<CommandAcceptedResponse>> Delete(long id)
+        => await AcceptAsync(new DeleteUserCommand(Guid.NewGuid(), id));
 
-    private ActionResult EmailConflict(EmailAlreadyExistsException ex)
+    // Marks the command Pending before publishing it: the worker can finish before this request returns, and
+    // a Pending mark written after the publish would overwrite its outcome. The 202 points at the status
+    // endpoint through the Location header and carries the same id in the body.
+    private async Task<ActionResult<CommandAcceptedResponse>> AcceptAsync(ICommand command)
     {
-        LogEmailAlreadyInUse(ex.Email);
-        ModelState.AddModelError(nameof(UserDto.Email), ex.Message);
-        return ValidationProblem(ModelState);
+        await _statusStore.MarkPendingAsync(command.CommandId);
+        await _messageBus.PublishAsync(command);
+        return AcceptedAtAction(nameof(CommandsController.GetStatus), "Commands", new { id = command.CommandId }, new CommandAcceptedResponse { CommandId = command.CommandId });
     }
-
-    // Called after a write has succeeded. The cached list must go even if the caller has disconnected by now,
-    // so this deliberately ignores the request's cancellation token. The single-user cache is invalidated by
-    // the service layer, where that read is cached.
-    private Task EvictUsersListAsync()
-        => _outputCache.EvictByTagAsync(OutputCachingExtensions.UsersTag, CancellationToken.None).AsTask();
 
     // Handled errors, logged where they are handled so the reason survives the response. A missing id is a
-    // client mistake and stays at Information; the two write failures are worth a Warning.
+    // client mistake and stays at Information.
     [LoggerMessage(EventId = 1001, Level = LogLevel.Information, Message = "User {UserId} was not found")]
     private partial void LogUserNotFound(long userId);
-
-    [LoggerMessage(EventId = 1002, Level = LogLevel.Warning, Message = "Email {Email} is already in use by another user")]
-    private partial void LogEmailAlreadyInUse(string email);
-
-    [LoggerMessage(EventId = 1003, Level = LogLevel.Warning, Message = "User {UserId} no longer exists; the update was not applied")]
-    private partial void LogUserNoLongerExists(long userId);
 }

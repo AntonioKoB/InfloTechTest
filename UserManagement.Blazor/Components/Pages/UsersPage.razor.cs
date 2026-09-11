@@ -10,6 +10,7 @@ public partial class UsersPage
     [Inject] private IUsersApi UsersApi { get; set; } = default!;
 
     private List<RowState> _rows = [];
+    private UserListFilter _filter = UserListFilter.All;
     private bool _showAddModal;
 
     protected override async Task OnInitializedAsync()
@@ -19,16 +20,19 @@ public partial class UsersPage
 
     private async Task LoadAsync(UserListFilter filter)
     {
+        _filter = filter;
         var users = await UsersApi.GetUsersAsync(filter);
         _rows = users.Select(u => new RowState(Guid.NewGuid(), u)).ToList();
     }
 
     private void OpenAddModal() => _showAddModal = true;
 
-    private void HandleUserAdded(UserDto created)
+    // The API only accepted the create; the new user's id is not known here, so the list is reloaded rather
+    // than a row appended.
+    private async Task HandleUserAdded()
     {
-        _rows.Add(new RowState(Guid.NewGuid(), created));
         _showAddModal = false;
+        await LoadAsync(_filter);
     }
 
     private void HandleAddCancelled() => _showAddModal = false;

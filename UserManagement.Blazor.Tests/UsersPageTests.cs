@@ -66,19 +66,25 @@ public class UsersPageTests : BunitContext
     }
 
     [Fact]
-    public async Task ModalOnSaved_MustAppendCreatedUserAndCloseModal()
+    public async Task ModalOnSaved_MustReloadTheListForTheCurrentFilterAndCloseModal()
     {
         // Arrange
+        // The API only accepted the create; the new user's id is not known here. The page reloads the list
+        // it is showing rather than appending a row it cannot fill in.
         _usersApi.Setup(a => a.GetUsersAsync(UserListFilter.All)).ReturnsAsync([]);
+        _usersApi.SetupSequence(a => a.GetUsersAsync(UserListFilter.Active))
+            .ReturnsAsync([])
+            .ReturnsAsync([SetupUser(5, "Brand New")]);
         var cut = Render<UsersPage>();
+        cut.Find("#filter-active").Click();
         cut.Find("#add-user-button").Click();
         var modal = cut.FindComponent<AddUserModal>();
-        var created = SetupUser(5, "Brand New");
 
         // Act
-        await cut.InvokeAsync(() => modal.Instance.OnSaved.InvokeAsync(created));
+        await cut.InvokeAsync(() => modal.Instance.OnSaved.InvokeAsync());
 
         // Assert
+        _usersApi.Verify(a => a.GetUsersAsync(UserListFilter.Active), Times.Exactly(2));
         cut.FindComponents<UserRow>().Should().ContainSingle(r => r.Instance.User.Forename == "Brand New");
         cut.FindComponent<AddUserModal>().Instance.Visible.Should().BeFalse();
     }

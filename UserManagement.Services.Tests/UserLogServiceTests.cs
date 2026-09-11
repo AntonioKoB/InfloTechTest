@@ -2,34 +2,37 @@ using System;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using UserManagement.Data;
 using UserManagement.Models;
+using UserManagement.Services.Commands;
 using UserManagement.Services.Domain.Implementations;
+using UserManagement.Services.Messaging;
 
 namespace UserManagement.Data.Tests;
 
 public class UserLogServiceTests
 {
     [Fact]
-    public async Task RecordAsync_WhenCalledWithBeforeAndAfter_MustPersistLogWithBothSnapshots()
+    public async Task RecordAsync_WhenCalledWithBeforeAndAfter_MustPublishALogCommandWithBothSnapshots()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        // Recording an action builds the finished entry here and hands it to the bus; the write itself is the
+        // log command handler's job, off the caller's path.
         var service = CreateService();
         var before = new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1) };
         var after = new User { Id = 5, Forename = "Updated", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1) };
-        UserLog? captured = null;
-        _dataContext
-            .Setup(s => s.CreateAsync(It.IsAny<UserLog>()))
-            .Callback<UserLog>(log => captured = log)
-            .Returns(Task.CompletedTask);
+        var published = CapturePublishedCommand();
 
         // Act: Invokes the method under test with the arranged parameters.
         await service.RecordAsync(5, UserLogAction.Updated, before, after);
 
         // Assert: Verifies that the action of the method under test behaves as expected.
-        captured.Should().NotBeNull();
-        captured!.UserId.Should().Be(5);
+        published.Value.Should().NotBeNull();
+        published.Value!.CommandId.Should().NotBeEmpty();
+        var captured = published.Value.Entry;
+        captured.UserId.Should().Be(5);
         captured.Action.Should().Be(UserLogAction.Updated);
         captured.Timestamp.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
         JsonSerializer.Deserialize<User>(captured.BeforeJson!).Should().BeEquivalentTo(before);
@@ -37,23 +40,34 @@ public class UserLogServiceTests
     }
 
     [Fact]
-    public async Task RecordAsync_WhenBeforeIsNull_MustPersistLogWithNullBeforeJson()
+    public async Task RecordAsync_MustNotWriteTheEntryItself()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var service = CreateService();
         var after = new User { Id = 5, Forename = "Brand New", Surname = "User", Email = "brandnewuser@example.com", DateOfBirth = new DateOnly(1995, 4, 12) };
-        UserLog? captured = null;
-        _dataContext
-            .Setup(s => s.CreateAsync(It.IsAny<UserLog>()))
-            .Callback<UserLog>(log => captured = log)
-            .Returns(Task.CompletedTask);
 
         // Act: Invokes the method under test with the arranged parameters.
         await service.RecordAsync(5, UserLogAction.Created, before: null, after: after);
 
         // Assert: Verifies that the action of the method under test behaves as expected.
-        captured.Should().NotBeNull();
-        captured!.BeforeJson.Should().BeNull();
+        _dataContext.Verify(d => d.CreateAsync(It.IsAny<UserLog>()), Times.Never);
+        _messageBus.Verify(b => b.PublishAsync(It.IsAny<RecordUserLogCommand>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RecordAsync_WhenBeforeIsNull_MustPublishALogCommandWithNullBeforeJson()
+    {
+        // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
+        var service = CreateService();
+        var after = new User { Id = 5, Forename = "Brand New", Surname = "User", Email = "brandnewuser@example.com", DateOfBirth = new DateOnly(1995, 4, 12) };
+        var published = CapturePublishedCommand();
+
+        // Act: Invokes the method under test with the arranged parameters.
+        await service.RecordAsync(5, UserLogAction.Created, before: null, after: after);
+
+        // Assert: Verifies that the action of the method under test behaves as expected.
+        var captured = published.Value.Should().NotBeNull().And.Subject.As<RecordUserLogCommand>().Entry;
+        captured.BeforeJson.Should().BeNull();
         JsonSerializer.Deserialize<User>(captured.AfterJson!).Should().BeEquivalentTo(after);
     }
 
@@ -67,39 +81,31 @@ public class UserLogServiceTests
         var service = CreateService();
         var before = new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1), PasswordHash = "hash-before" };
         var after = new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1), PasswordHash = "hash-after" };
-        UserLog? captured = null;
-        _dataContext
-            .Setup(s => s.CreateAsync(It.IsAny<UserLog>()))
-            .Callback<UserLog>(log => captured = log)
-            .Returns(Task.CompletedTask);
+        var published = CapturePublishedCommand();
 
         // Act: Invokes the method under test with the arranged parameters.
         await service.RecordAsync(5, UserLogAction.Updated, before, after);
 
         // Assert: Verifies that the action of the method under test behaves as expected.
-        captured.Should().NotBeNull();
-        captured!.BeforeJson.Should().NotContain(nameof(User.PasswordHash)).And.NotContain("hash-before");
+        var captured = published.Value.Should().NotBeNull().And.Subject.As<RecordUserLogCommand>().Entry;
+        captured.BeforeJson.Should().NotContain(nameof(User.PasswordHash)).And.NotContain("hash-before");
         captured.AfterJson.Should().NotContain(nameof(User.PasswordHash)).And.NotContain("hash-after");
     }
 
     [Fact]
-    public async Task RecordAsync_WhenAfterIsNull_MustPersistLogWithNullAfterJson()
+    public async Task RecordAsync_WhenAfterIsNull_MustPublishALogCommandWithNullAfterJson()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var service = CreateService();
         var before = new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1) };
-        UserLog? captured = null;
-        _dataContext
-            .Setup(s => s.CreateAsync(It.IsAny<UserLog>()))
-            .Callback<UserLog>(log => captured = log)
-            .Returns(Task.CompletedTask);
+        var published = CapturePublishedCommand();
 
         // Act: Invokes the method under test with the arranged parameters.
         await service.RecordAsync(5, UserLogAction.Deleted, before: before, after: null);
 
         // Assert: Verifies that the action of the method under test behaves as expected.
-        captured.Should().NotBeNull();
-        captured!.AfterJson.Should().BeNull();
+        var captured = published.Value.Should().NotBeNull().And.Subject.As<RecordUserLogCommand>().Entry;
+        captured.AfterJson.Should().BeNull();
         JsonSerializer.Deserialize<User>(captured.BeforeJson!).Should().BeEquivalentTo(before);
     }
 
@@ -217,6 +223,22 @@ public class UserLogServiceTests
         result.Should().BeNull();
     }
 
+    private sealed class Captured<T> where T : class
+    {
+        public T? Value { get; set; }
+    }
+
+    private Captured<RecordUserLogCommand> CapturePublishedCommand()
+    {
+        var captured = new Captured<RecordUserLogCommand>();
+        _messageBus
+            .Setup(b => b.PublishAsync(It.IsAny<ICommand>(), It.IsAny<CancellationToken>()))
+            .Callback<ICommand, CancellationToken>((c, _) => captured.Value = c as RecordUserLogCommand)
+            .Returns(Task.CompletedTask);
+        return captured;
+    }
+
     private readonly Mock<IDataContext> _dataContext = new();
-    private UserLogService CreateService() => new(_dataContext.Object);
+    private readonly Mock<IMessageBus> _messageBus = new();
+    private UserLogService CreateService() => new(_dataContext.Object, _messageBus.Object);
 }

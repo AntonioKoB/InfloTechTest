@@ -60,12 +60,13 @@ public partial class UserRow
 
         try
         {
-            var saved = await UsersApi.UpdateUserAsync(User.Id, ToUpdateRequest(_editModel));
+            await UsersApi.UpdateUserAsync(User.Id, ToUpdateRequest(_editModel));
 
-            User = saved;
+            // The API accepted the update and returns no user; the row shows the values that were typed.
+            User = ToDto(_editModel, User.Id);
             _editing = false;
             Snackbar.Add("User saved successfully", Severity.Success);
-            await OnSaved.InvokeAsync(saved);
+            await OnSaved.InvokeAsync(User);
         }
         catch (ApiException ex) when (ex.StatusCode == HttpStatusCode.BadRequest)
         {
@@ -91,6 +92,16 @@ public partial class UserRow
         DateOfBirth = model.DateOfBirth,
         IsActive = model.IsActive,
         Password = string.IsNullOrEmpty(model.Password) ? null : model.Password
+    };
+
+    private static UserDto ToDto(EditUserModel model, long id) => new()
+    {
+        Id = id,
+        Forename = model.Forename,
+        Surname = model.Surname,
+        Email = model.Email,
+        DateOfBirth = model.DateOfBirth ?? default,
+        IsActive = model.IsActive
     };
 
     private static EditUserModel ToEditModel(UserDto user) => new()
