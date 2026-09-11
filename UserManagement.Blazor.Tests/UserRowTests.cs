@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Bunit;
 using Microsoft.AspNetCore.Components.Web;
@@ -27,7 +28,12 @@ public class UserRowTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddMudServices();
         Services.AddSingleton(_usersApi.Object);
+        Services.AddSingleton(_poller.Object);
         Services.AddSingleton(_snackbar.Object);
+
+        // Unless a test says otherwise, every accepted command completes.
+        _poller.Setup(p => p.WaitForOutcomeAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) => Completed(id));
     }
 
     [Fact]
@@ -92,12 +98,7 @@ public class UserRowTests : BunitContext
     {
         // Arrange
         var user = SetupUser();
-        _usersApi.Setup(a => a.GetUserByIdAsync(user.Id, true)).ReturnsAsync(user);
-        _usersApi.Setup(a => a.GetUserLogsAsync(user.Id)).ReturnsAsync([]);
-        var cut = Render<UserRow>(p => p
-            .Add(x => x.RowKey, Guid.NewGuid())
-            .Add(x => x.User, user));
-        cut.Find("#row-header").Click();
+        var cut = RenderExpanded(user);
 
         // Act
         cut.Find("#edit-button").Click();
@@ -112,12 +113,7 @@ public class UserRowTests : BunitContext
     {
         // Arrange
         var user = SetupUser();
-        _usersApi.Setup(a => a.GetUserByIdAsync(user.Id, true)).ReturnsAsync(user);
-        _usersApi.Setup(a => a.GetUserLogsAsync(user.Id)).ReturnsAsync([]);
-        var cut = Render<UserRow>(p => p
-            .Add(x => x.RowKey, Guid.NewGuid())
-            .Add(x => x.User, user));
-        cut.Find("#row-header").Click();
+        var cut = RenderExpanded(user);
         cut.Find("#edit-button").Click();
 
         // Act
@@ -129,21 +125,16 @@ public class UserRowTests : BunitContext
     }
 
     [Fact]
-    public async Task EditMode_ClickSave_MustCallUpdateUserAsyncAndRaiseOnSavedWithTheEditedValues()
+    public async Task EditMode_ClickSave_MustCallUpdateUserAsyncWaitForTheOutcomeAndRaiseOnSavedWithTheEditedValues()
     {
         // Arrange
-        // The API accepts the update and returns a command id, not the saved user. The row shows what was
-        // typed, so the values the user just entered are what OnSaved carries and what the row renders.
+        // The API accepts the update and returns a command id. Once the poller reports Completed the typed
+        // values are confirmed saved, so they are what OnSaved carries and what the row renders.
         var user = SetupUser();
-        _usersApi.Setup(a => a.GetUserByIdAsync(user.Id, true)).ReturnsAsync(user);
-        _usersApi.Setup(a => a.GetUserLogsAsync(user.Id)).ReturnsAsync([]);
-        _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>())).ReturnsAsync(Accepted());
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>())).ReturnsAsync(accepted);
         UserDto? savedArg = null;
-        var cut = Render<UserRow>(p => p
-            .Add(x => x.RowKey, Guid.NewGuid())
-            .Add(x => x.User, user)
-            .Add(x => x.OnSaved, saved => savedArg = saved));
-        cut.Find("#row-header").Click();
+        var cut = RenderExpanded(user, p => p.Add(x => x.OnSaved, saved => savedArg = saved));
         cut.Find("#edit-button").Click();
         cut.Find("#input-forename").Change("Renamed");
 
@@ -152,11 +143,81 @@ public class UserRowTests : BunitContext
 
         // Assert
         _usersApi.Verify(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>()), Times.Once);
+        _poller.Verify(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>()), Times.Once);
         savedArg.Should().NotBeNull();
         savedArg!.Id.Should().Be(user.Id);
         savedArg.Forename.Should().Be("Renamed");
         savedArg.Surname.Should().Be(user.Surname);
         cut.Markup.Should().Contain("Renamed");
+        cut.FindAll("input").Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task EditMode_ClickSave_WhilePending_MustShowTheSavingStateAndDisableTheButtons()
+    {
+        // Arrange
+        var user = SetupUser();
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>())).ReturnsAsync(accepted);
+        var pending = new TaskCompletionSource<CommandStatusResponse>();
+        _poller.Setup(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>())).Returns(pending.Task);
+        var cut = RenderExpanded(user);
+        cut.Find("#edit-button").Click();
+
+        // Act
+        await cut.InvokeAsync(() => cut.Find("#save-button").Click());
+
+        // Assert
+        cut.Find("#saving-indicator").Should().NotBeNull();
+        cut.Find("#save-button").HasAttribute("disabled").Should().BeTrue();
+        cut.Find("#cancel-button").HasAttribute("disabled").Should().BeTrue();
+
+        pending.SetResult(Completed(accepted.CommandId));
+        cut.WaitForAssertion(() => cut.FindAll("#saving-indicator").Should().BeEmpty());
+    }
+
+    [Fact]
+    public async Task EditMode_SaveWhenTheCommandFails_MustShowTheFailureAndStayInEditMode()
+    {
+        // Arrange
+        var user = SetupUser();
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>())).ReturnsAsync(accepted);
+        _poller.Setup(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Failed(accepted.CommandId, "A user with email 'taken@example.com' already exists."));
+        var wasSaved = false;
+        var cut = RenderExpanded(user, p => p.Add(x => x.OnSaved, _ => wasSaved = true));
+        cut.Find("#edit-button").Click();
+
+        // Act
+        await cut.InvokeAsync(() => cut.Find("#save-button").Click());
+
+        // Assert
+        cut.Find("#email-error").TextContent.Should().Contain("already exists");
+        cut.FindAll("input").Should().NotBeEmpty();
+        wasSaved.Should().BeFalse();
+        cut.FindAll("#saving-indicator").Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task EditMode_SaveWhenTheCommandTimesOut_MustShowTheTimeoutErrorAndStayInEditMode()
+    {
+        // Arrange
+        var user = SetupUser();
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>())).ReturnsAsync(accepted);
+        _poller.Setup(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException("Command was still pending after 30 seconds."));
+        var cut = RenderExpanded(user);
+        cut.Find("#edit-button").Click();
+
+        // Act
+        await cut.InvokeAsync(() => cut.Find("#save-button").Click());
+
+        // Assert
+        cut.Find("#save-error").TextContent.Should().Contain("did not confirm");
+        cut.FindAll("input").Should().NotBeEmpty();
+        cut.Find("#save-button").HasAttribute("disabled").Should().BeFalse();
     }
 
     [Fact]
@@ -166,16 +227,11 @@ public class UserRowTests : BunitContext
         // The stored hash is never shown or pre-filled. Leaving the field blank means "keep the current
         // password", which the API expects as a null Password on the update request.
         var user = SetupUser();
-        _usersApi.Setup(a => a.GetUserByIdAsync(user.Id, true)).ReturnsAsync(user);
-        _usersApi.Setup(a => a.GetUserLogsAsync(user.Id)).ReturnsAsync([]);
         UpdateUserRequest? sentRequest = null;
         _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>()))
             .Callback<long, UpdateUserRequest>((_, r) => sentRequest = r)
             .ReturnsAsync(Accepted());
-        var cut = Render<UserRow>(p => p
-            .Add(x => x.RowKey, Guid.NewGuid())
-            .Add(x => x.User, user));
-        cut.Find("#row-header").Click();
+        var cut = RenderExpanded(user);
         cut.Find("#edit-button").Click();
         var passwordInput = cut.Find("#input-password");
         passwordInput.GetAttribute("type").Should().Be("password");
@@ -194,16 +250,11 @@ public class UserRowTests : BunitContext
     {
         // Arrange
         var user = SetupUser();
-        _usersApi.Setup(a => a.GetUserByIdAsync(user.Id, true)).ReturnsAsync(user);
-        _usersApi.Setup(a => a.GetUserLogsAsync(user.Id)).ReturnsAsync([]);
         UpdateUserRequest? sentRequest = null;
         _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>()))
             .Callback<long, UpdateUserRequest>((_, r) => sentRequest = r)
             .ReturnsAsync(Accepted());
-        var cut = Render<UserRow>(p => p
-            .Add(x => x.RowKey, Guid.NewGuid())
-            .Add(x => x.User, user));
-        cut.Find("#row-header").Click();
+        var cut = RenderExpanded(user);
         cut.Find("#edit-button").Click();
         cut.Find("#input-password").Change("new-secret");
 
@@ -220,13 +271,8 @@ public class UserRowTests : BunitContext
     {
         // Arrange
         var user = SetupUser();
-        _usersApi.Setup(a => a.GetUserByIdAsync(user.Id, true)).ReturnsAsync(user);
-        _usersApi.Setup(a => a.GetUserLogsAsync(user.Id)).ReturnsAsync([]);
         _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>())).ReturnsAsync(Accepted());
-        var cut = Render<UserRow>(p => p
-            .Add(x => x.RowKey, Guid.NewGuid())
-            .Add(x => x.User, user));
-        cut.Find("#row-header").Click();
+        var cut = RenderExpanded(user);
         cut.Find("#edit-button").Click();
 
         // Act
@@ -241,16 +287,10 @@ public class UserRowTests : BunitContext
     {
         // Arrange
         var user = SetupUser();
-        _usersApi.Setup(a => a.GetUserByIdAsync(user.Id, true)).ReturnsAsync(user);
-        _usersApi.Setup(a => a.GetUserLogsAsync(user.Id)).ReturnsAsync([]);
         var conflict = await CreateEmailConflictException();
         _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>())).ThrowsAsync(conflict);
         var wasSaved = false;
-        var cut = Render<UserRow>(p => p
-            .Add(x => x.RowKey, Guid.NewGuid())
-            .Add(x => x.User, user)
-            .Add(x => x.OnSaved, _ => wasSaved = true));
-        cut.Find("#row-header").Click();
+        var cut = RenderExpanded(user, p => p.Add(x => x.OnSaved, _ => wasSaved = true));
         cut.Find("#edit-button").Click();
 
         // Act
@@ -262,30 +302,109 @@ public class UserRowTests : BunitContext
     }
 
     [Fact]
-    public async Task ClickDelete_MustCallDeleteUserAsyncAndRaiseOnDeletedWithSnackbar()
+    public async Task ClickDelete_MustCallDeleteUserAsyncWaitForTheOutcomeAndRaiseOnDeletedWithSnackbar()
     {
         // Arrange
+        // The row goes only once the worker has actually deleted the user.
         var user = SetupUser();
-        _usersApi.Setup(a => a.GetUserByIdAsync(user.Id, true)).ReturnsAsync(user);
-        _usersApi.Setup(a => a.GetUserLogsAsync(user.Id)).ReturnsAsync([]);
-        _usersApi.Setup(a => a.DeleteUserAsync(user.Id)).Returns(Task.CompletedTask);
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.DeleteUserAsync(user.Id)).ReturnsAsync(accepted);
         var wasDeleted = false;
-        var cut = Render<UserRow>(p => p
-            .Add(x => x.RowKey, Guid.NewGuid())
-            .Add(x => x.User, user)
-            .Add(x => x.OnDeleted, () => wasDeleted = true));
-        cut.Find("#row-header").Click();
+        var cut = RenderExpanded(user, p => p.Add(x => x.OnDeleted, () => wasDeleted = true));
 
         // Act
         await cut.InvokeAsync(() => cut.Find("#delete-button").Click());
 
         // Assert
         _usersApi.Verify(a => a.DeleteUserAsync(user.Id), Times.Once);
+        _poller.Verify(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>()), Times.Once);
         wasDeleted.Should().BeTrue();
         _snackbar.Verify(s => s.Add(It.IsAny<string>(), Severity.Success, It.IsAny<Action<SnackbarOptions>>(), It.IsAny<string>()), Times.Once);
     }
 
+    [Fact]
+    public async Task ClickDelete_WhilePending_MustShowTheDeletingStateAndDisableTheButtons()
+    {
+        // Arrange
+        var user = SetupUser();
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.DeleteUserAsync(user.Id)).ReturnsAsync(accepted);
+        var pending = new TaskCompletionSource<CommandStatusResponse>();
+        _poller.Setup(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>())).Returns(pending.Task);
+        var cut = RenderExpanded(user);
+
+        // Act
+        await cut.InvokeAsync(() => cut.Find("#delete-button").Click());
+
+        // Assert
+        cut.Find("#deleting-indicator").Should().NotBeNull();
+        cut.Find("#delete-button").HasAttribute("disabled").Should().BeTrue();
+        cut.Find("#edit-button").HasAttribute("disabled").Should().BeTrue();
+
+        pending.SetResult(Completed(accepted.CommandId));
+        cut.WaitForAssertion(() => cut.FindAll("#deleting-indicator").Should().BeEmpty());
+    }
+
+    [Fact]
+    public async Task ClickDelete_WhenTheCommandFails_MustShowTheErrorAndNotRaiseOnDeleted()
+    {
+        // Arrange
+        var user = SetupUser();
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.DeleteUserAsync(user.Id)).ReturnsAsync(accepted);
+        _poller.Setup(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Failed(accepted.CommandId, "Something went wrong while deleting."));
+        var wasDeleted = false;
+        var cut = RenderExpanded(user, p => p.Add(x => x.OnDeleted, () => wasDeleted = true));
+
+        // Act
+        await cut.InvokeAsync(() => cut.Find("#delete-button").Click());
+
+        // Assert
+        cut.Find("#delete-error").TextContent.Should().Contain("Something went wrong");
+        wasDeleted.Should().BeFalse();
+        cut.FindAll("#deleting-indicator").Should().BeEmpty();
+        cut.Find("#delete-button").HasAttribute("disabled").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ClickDelete_WhenTheCommandTimesOut_MustShowTheTimeoutErrorAndNotRaiseOnDeleted()
+    {
+        // Arrange
+        var user = SetupUser();
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.DeleteUserAsync(user.Id)).ReturnsAsync(accepted);
+        _poller.Setup(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException("Command was still pending after 30 seconds."));
+        var wasDeleted = false;
+        var cut = RenderExpanded(user, p => p.Add(x => x.OnDeleted, () => wasDeleted = true));
+
+        // Act
+        await cut.InvokeAsync(() => cut.Find("#delete-button").Click());
+
+        // Assert
+        cut.Find("#delete-error").TextContent.Should().Contain("did not confirm");
+        wasDeleted.Should().BeFalse();
+    }
+
+    private IRenderedComponent<UserRow> RenderExpanded(UserDto user, Action<ComponentParameterCollectionBuilder<UserRow>>? configure = null)
+    {
+        _usersApi.Setup(a => a.GetUserByIdAsync(user.Id, true)).ReturnsAsync(user);
+        _usersApi.Setup(a => a.GetUserLogsAsync(user.Id)).ReturnsAsync([]);
+        var cut = Render<UserRow>(p =>
+        {
+            p.Add(x => x.RowKey, Guid.NewGuid()).Add(x => x.User, user);
+            configure?.Invoke(p);
+        });
+        cut.Find("#row-header").Click();
+        return cut;
+    }
+
     private static CommandAcceptedResponse Accepted() => new() { CommandId = Guid.NewGuid() };
+
+    private static CommandStatusResponse Completed(Guid commandId) => new() { CommandId = commandId, State = CommandState.Completed, UserId = 1 };
+
+    private static CommandStatusResponse Failed(Guid commandId, string error) => new() { CommandId = commandId, State = CommandState.Failed, Error = error };
 
     private static async Task<ApiException> CreateEmailConflictException()
     {
@@ -315,5 +434,6 @@ public class UserRowTests : BunitContext
         };
 
     private readonly Mock<IUsersApi> _usersApi = new();
+    private readonly Mock<ICommandPoller> _poller = new();
     private readonly Mock<ISnackbar> _snackbar = new();
 }
