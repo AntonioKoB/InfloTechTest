@@ -53,7 +53,17 @@ public partial class CommandWorker : BackgroundService
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            // The host is stopping; that is the only way out of the loop.
+            // The host is stopping; that is the only expected way out of the loop.
+            LogWorkerStopped();
+        }
+        catch (Exception ex)
+        {
+            // Only the bus itself can throw here (each command's own failure is handled in ProcessAsync). A
+            // worker that went quiet would leave every later command Pending while the API kept accepting
+            // them, so this says why it died and lets the host's BackgroundService policy stop the process,
+            // which the platform then restarts.
+            LogWorkerFaulted(ex);
+            throw;
         }
     }
 
@@ -92,4 +102,10 @@ public partial class CommandWorker : BackgroundService
 
     [LoggerMessage(EventId = 1401, Level = LogLevel.Warning, Message = "Command {CommandType} {CommandId} failed: {Error}")]
     private partial void LogCommandFailed(Exception exception, string commandType, Guid commandId, string error);
+
+    [LoggerMessage(EventId = 1402, Level = LogLevel.Information, Message = "Command worker stopped with the host")]
+    private partial void LogWorkerStopped();
+
+    [LoggerMessage(EventId = 1403, Level = LogLevel.Error, Message = "Command worker faulted; accepted commands will not run until the host restarts")]
+    private partial void LogWorkerFaulted(Exception exception);
 }

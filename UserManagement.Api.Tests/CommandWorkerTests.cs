@@ -196,6 +196,52 @@ public class CommandWorkerTests : IAsyncLifetime
         instances.Distinct().Should().HaveCount(2);
     }
 
+    [Fact]
+    public async Task StopAsync_MustLogThatTheWorkerStoppedAtInformation()
+    {
+        // Arrange
+        // BackgroundService starts ExecuteAsync through Task.Run with the stopping token, so a stop that lands
+        // before the loop has begun cancels it without ever running it. One processed command proves the loop
+        // is live before it is asked to stop.
+        var handler = new Mock<ICommandHandler<TestCommand>>();
+        handler.Setup(h => h.HandleAsync(It.IsAny<TestCommand>(), It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        await StartWorkerAsync(s => s.AddSingleton(handler.Object));
+        var command = new TestCommand(Guid.NewGuid());
+        await _bus.PublishAsync(command);
+        await WaitForOutcomeAsync(command.CommandId);
+
+        // Act
+        await _worker!.StopAsync(CancellationToken.None);
+
+        // Assert
+        _logger.Collector.GetSnapshot().Should().ContainSingle()
+            .Which.Should().Match<FakeLogRecord>(r => r.Level == LogLevel.Information && r.Id.Id == 1402);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTheBusItselfFails_MustLogAtErrorWithTheExceptionAndStop()
+    {
+        // Arrange
+        // A worker that died quietly would leave every later command Pending while the API kept accepting
+        // them. It logs why and lets the exception reach the host, whose default policy stops the process.
+        var bus = new Mock<IMessageBus>();
+        bus.Setup(b => b.ConsumeAsync(It.IsAny<CancellationToken>())).Throws(new InvalidOperationException("bus is gone"));
+        using var provider = new ServiceCollection().BuildServiceProvider();
+        using var worker = new CommandWorker(bus.Object, provider.GetRequiredService<IServiceScopeFactory>(), _store, _outputCache.Object, _logger);
+
+        // Act
+        var act = async () =>
+        {
+            await worker.StartAsync(CancellationToken.None);
+            await worker.ExecuteTask!;
+        };
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("bus is gone");
+        _logger.Collector.GetSnapshot().Should().ContainSingle()
+            .Which.Should().Match<FakeLogRecord>(r => r.Level == LogLevel.Error && r.Id.Id == 1403 && r.Exception is InvalidOperationException);
+    }
+
     private sealed class ScopeRecordingHandler : ICommandHandler<TestCommand>
     {
         private readonly List<object> _instances;

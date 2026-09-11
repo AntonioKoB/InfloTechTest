@@ -518,7 +518,9 @@ Unhandled exceptions are recorded by the framework with no code of this project'
 | The API rejected the session token (method and path, never the token) | Blazor `BearerTokenHandler` | Warning |
 | The API rejected the logout; signed out locally anyway | Blazor `AuthEndpoints` | Warning |
 | Antiforgery validation failed on a login or logout post | Blazor `AuthEndpoints` | Warning |
+| The worker's consume loop faulted (the exception); the host stops so the process is restarted | API `CommandWorker` | Error |
 | User, log entry or command not found by id | API `UsersController`, `LogsController`, `CommandsController` | Information |
+| The worker stopped with the host | API `CommandWorker` | Information |
 
 The worker runs outside any request, so its SQL commands and its log lines appear as their own operations rather than under the request that accepted the command.
 
@@ -568,6 +570,8 @@ The Blazor UI treats a `202` as accepted: after an add it reloads the list it is
 ### Cost, and the limits that come with it
 
 The in-memory transport (`InMemoryMessageBus`, a `System.Threading.Channels` channel) and the in-memory status store (`InMemoryCommandStatusStore`, a `ConcurrentDictionary`) were chosen purely for cost: they need no Azure resource and add nothing to the bill. They are not durable across restarts and not shared across instances - a command accepted just before a restart is lost, and an instance only knows about the commands it accepted itself. Neither bites on a single free-tier instance, which is what the template deploys. A production deployment would use Azure Service Bus behind the same `IMessageBus` interface, so that the worker can move to its own host and scale independently of the API, and a table behind `ICommandStatusStore`, so that statuses survive restarts, are visible from every instance and can expire (the dictionary never forgets an entry).
+
+There is no outbox either. Marking a command Pending and publishing it, and writing a user and publishing its log entry, are each two operations rather than one transaction. The in-memory bus makes that harmless, since a publish cannot fail except at shutdown; a broker would not. The command table is where an outbox lands: the row inserted when the API accepts a command is both its durable queue entry and the status the caller polls, written in the same transaction as any business change, with the worker or a relay reading from it.
 
 ## Points to improve
 
