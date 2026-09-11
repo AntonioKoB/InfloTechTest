@@ -13,6 +13,7 @@ using Refit;
 using UserManagement.Blazor.Api;
 using UserManagement.Blazor.Auth;
 using UserManagement.Blazor.Components;
+using UserManagement.Blazor.Telemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +35,7 @@ builder.Services
     });
 builder.Services.AddAuthorization();
 builder.Services.AddHealthChecks();
+builder.Services.AddBlazorTelemetry(builder.Configuration);
 builder.Services.AddCascadingAuthenticationState();
 
 var refitSettings = new RefitSettings
