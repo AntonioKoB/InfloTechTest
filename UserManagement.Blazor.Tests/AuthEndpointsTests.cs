@@ -1,19 +1,26 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Http.Metadata;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
+using Microsoft.Extensions.Primitives;
 using Refit;
 using UserManagement.Api.Contracts.Auth;
 using UserManagement.Blazor.Api;
@@ -30,7 +37,7 @@ public class AuthEndpointsTests
         var response = SetupSuccessfulLogin();
 
         // Act
-        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext(), LoggerFactory);
+        var result = await AuthEndpoints.LoginAsync(CreateLoginHttpContext(), _authApi.Object, LoggerFactory);
 
         // Assert
         result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be("/");
@@ -55,7 +62,7 @@ public class AuthEndpointsTests
             .Returns(Task.CompletedTask);
 
         // Act
-        await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext(), LoggerFactory);
+        await AuthEndpoints.LoginAsync(CreateLoginHttpContext(), _authApi.Object, LoggerFactory);
 
         // Assert
         properties.Should().NotBeNull();
@@ -76,7 +83,7 @@ public class AuthEndpointsTests
         SetupSuccessfulLogin();
 
         // Act
-        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl, _authApi.Object, CreateHttpContext(), LoggerFactory);
+        var result = await AuthEndpoints.LoginAsync(CreateLoginHttpContext(returnUrl: returnUrl), _authApi.Object, LoggerFactory);
 
         // Assert
         result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be(expectedRedirect);
@@ -89,7 +96,7 @@ public class AuthEndpointsTests
         _authApi.Setup(a => a.LoginAsync(It.IsAny<LoginRequest>())).ThrowsAsync(await CreateUnauthorizedException());
 
         // Act
-        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext(), LoggerFactory);
+        var result = await AuthEndpoints.LoginAsync(CreateLoginHttpContext(), _authApi.Object, LoggerFactory);
 
         // Assert
         result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be("/login?error=1");
@@ -97,13 +104,18 @@ public class AuthEndpointsTests
     }
 
     [Fact]
-    public async Task LoginAsync_WhenTheAntiforgeryTokenWasNotValidated_MustReturnBadRequestWithoutCallingTheApi()
+    public async Task LoginAsync_WhenTheAntiforgeryTokenWasNotValidated_MustReturnBadRequestWithoutReadingTheFormOrCallingTheApi()
     {
         // Arrange
+        // The real bug this guards against: ASP.NET Core throws if the form is read while antiforgery
+        // validation is invalid, and [FromForm] binding used to read it before this handler's own check
+        // ever ran - turning every stale-token login into an unhandled 500 instead of this 400. The request
+        // body here throws if touched, so the handler reading the form before checking would fail this test
+        // with that exception rather than quietly returning 400 for the wrong reason.
         SetupSuccessfulLogin();
 
         // Act
-        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext(antiforgeryValidationPassed: false), LoggerFactory);
+        var result = await AuthEndpoints.LoginAsync(CreateLoginHttpContext(antiforgeryValidationPassed: false, poisonForm: true), _authApi.Object, LoggerFactory);
 
         // Assert
         result.Should().BeAssignableTo<IStatusCodeHttpResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
@@ -166,7 +178,7 @@ public class AuthEndpointsTests
         _authApi.Setup(a => a.LoginAsync(It.IsAny<LoginRequest>())).ThrowsAsync(await CreateUnauthorizedException());
 
         // Act
-        await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext(), LoggerFactory);
+        await AuthEndpoints.LoginAsync(CreateLoginHttpContext(), _authApi.Object, LoggerFactory);
 
         // Assert
         var record = LogRecords.Should().ContainSingle().Which;
@@ -203,6 +215,31 @@ public class AuthEndpointsTests
         LogRecords.Should().ContainSingle().Which.Level.Should().Be(LogLevel.Warning);
     }
 
+    [Fact]
+    public async Task MapAuthEndpoints_LoginPost_MustDeclareTheFormContentTypesItAccepts()
+    {
+        // Arrange
+        // The login page is a Razor component route that answers POST as well. For a form post to /login,
+        // routing picks the handler over the page only because the handler declares the form content types
+        // it consumes; without that declaration every login post is an AmbiguousMatchException, and nothing
+        // above the routing layer would notice.
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddSingleton(_authApi.Object);
+        await using var app = builder.Build();
+
+        // Act
+        app.MapAuthEndpoints();
+        var login = ((IEndpointRouteBuilder)app).DataSources
+            .SelectMany(source => source.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Single(endpoint => endpoint.RoutePattern.RawText == "/login");
+
+        // Assert
+        var accepts = login.Metadata.GetMetadata<IAcceptsMetadata>();
+        accepts.Should().NotBeNull();
+        accepts!.ContentTypes.Should().Contain("application/x-www-form-urlencoded");
+    }
+
     [Theory]
     [InlineData(nameof(AuthEndpoints.LoginAsync))]
     [InlineData(nameof(AuthEndpoints.LogoutAsync))]
@@ -236,8 +273,6 @@ public class AuthEndpointsTests
         return response;
     }
 
-    private static LoginRequest CreateRequest() => new() { Email = "ploew@example.com", Password = "12345" };
-
     private HttpContext CreateHttpContext(bool antiforgeryValidationPassed = true, string? sessionToken = null)
     {
         var httpContext = new DefaultHttpContext
@@ -257,6 +292,52 @@ public class AuthEndpointsTests
         }
 
         return httpContext;
+    }
+
+    // LoginAsync reads Email/Password/ReturnUrl from the form itself (not [FromForm] binding - see
+    // AuthEndpoints for why), so its HttpContext needs a form. poisonForm gives it a body that throws if
+    // read instead, for the one test proving the handler never reads the form before checking antiforgery
+    // validity.
+    private HttpContext CreateLoginHttpContext(bool antiforgeryValidationPassed = true, string? returnUrl = null, bool poisonForm = false)
+    {
+        var httpContext = CreateHttpContext(antiforgeryValidationPassed);
+
+        if (poisonForm)
+        {
+            httpContext.Request.ContentType = "application/x-www-form-urlencoded";
+            httpContext.Request.Body = new ThrowingStream();
+        }
+        else
+        {
+            var fields = new Dictionary<string, StringValues>
+            {
+                ["Email"] = "ploew@example.com",
+                ["Password"] = "12345"
+            };
+            if (returnUrl is not null)
+                fields["ReturnUrl"] = returnUrl;
+
+            httpContext.Request.Form = new FormCollection(fields);
+        }
+
+        return httpContext;
+    }
+
+    // Fails the test loudly if anything tries to read the request body, instead of letting a premature
+    // form read succeed quietly - proving the ordering the real bug depended on getting wrong.
+    private sealed class ThrowingStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override int Read(byte[] buffer, int offset, int count) => throw new InvalidOperationException("The form must not be read before antiforgery validation is checked.");
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => throw new InvalidOperationException("The form must not be read before antiforgery validation is checked.");
+        public override void Flush() => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     private static async Task<ApiException> CreateUnauthorizedException()
