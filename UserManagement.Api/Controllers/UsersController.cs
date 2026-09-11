@@ -1,5 +1,6 @@
 using System.Threading;
 using Microsoft.AspNetCore.OutputCaching;
+using Microsoft.Extensions.Logging;
 using UserManagement.Api.Caching;
 using UserManagement.Api.Contracts.Logs;
 using UserManagement.Api.Contracts.Users;
@@ -12,19 +13,21 @@ namespace UserManagement.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/users")]
-public class UsersController : ControllerBase
+public partial class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
     private readonly IUserLogService _userLogService;
     private readonly ICredentialService _credentialService;
     private readonly IOutputCacheStore _outputCache;
+    private readonly ILogger<UsersController> _logger;
 
-    public UsersController(IUserService userService, IUserLogService userLogService, ICredentialService credentialService, IOutputCacheStore outputCache)
+    public UsersController(IUserService userService, IUserLogService userLogService, ICredentialService credentialService, IOutputCacheStore outputCache, ILogger<UsersController> logger)
     {
         _userService = userService;
         _userLogService = userLogService;
         _credentialService = credentialService;
         _outputCache = outputCache;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -45,7 +48,11 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<UserDto>> GetById(long id, bool recordAsViewed = false)
     {
         var user = await _userService.GetByIdAsync(id, recordAsViewed);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            LogUserNotFound(id);
+            return NotFound();
+        }
 
         return Ok(user.ToDto());
     }
@@ -80,7 +87,11 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<UserDto>> Update(long id, UpdateUserRequest request)
     {
         var user = await _userService.GetByIdAsync(id);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            LogUserNotFound(id);
+            return NotFound();
+        }
 
         request.ApplyTo(user);
         if (!string.IsNullOrEmpty(request.Password))
@@ -98,6 +109,7 @@ public class UsersController : ControllerBase
         }
         catch (UserNoLongerExistsException)
         {
+            LogUserNoLongerExists(id);
             return NotFound();
         }
 
@@ -115,6 +127,7 @@ public class UsersController : ControllerBase
 
     private ActionResult EmailConflict(EmailAlreadyExistsException ex)
     {
+        LogEmailAlreadyInUse(ex.Email);
         ModelState.AddModelError(nameof(UserDto.Email), ex.Message);
         return ValidationProblem(ModelState);
     }
@@ -124,4 +137,15 @@ public class UsersController : ControllerBase
     // the service layer, where that read is cached.
     private Task EvictUsersListAsync()
         => _outputCache.EvictByTagAsync(OutputCachingExtensions.UsersTag, CancellationToken.None).AsTask();
+
+    // Handled errors, logged where they are handled so the reason survives the response. A missing id is a
+    // client mistake and stays at Information; the two write failures are worth a Warning.
+    [LoggerMessage(EventId = 1001, Level = LogLevel.Information, Message = "User {UserId} was not found")]
+    private partial void LogUserNotFound(long userId);
+
+    [LoggerMessage(EventId = 1002, Level = LogLevel.Warning, Message = "Email {Email} is already in use by another user")]
+    private partial void LogEmailAlreadyInUse(string email);
+
+    [LoggerMessage(EventId = 1003, Level = LogLevel.Warning, Message = "User {UserId} no longer exists; the update was not applied")]
+    private partial void LogUserNoLongerExists(long userId);
 }

@@ -7,6 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using UserManagement.Blazor.Auth;
 
 namespace UserManagement.Blazor.Tests;
@@ -57,6 +59,21 @@ public class BearerTokenHandlerTests
     }
 
     [Fact]
+    public async Task SendAsync_WhenTheApiRejectsTheToken_MustLogTheRequestAtWarningWithoutTheToken()
+    {
+        // Arrange
+        var client = CreateClient(SignedInWithToken("expired-token"), respondWith: HttpStatusCode.Unauthorized);
+
+        // Act
+        await client.GetAsync("https://api.test/api/users");
+
+        // Assert
+        var record = _logger.Collector.GetSnapshot().Should().ContainSingle().Which;
+        record.Level.Should().Be(LogLevel.Warning);
+        record.Message.Should().Contain("GET /api/users").And.NotContain("expired-token");
+    }
+
+    [Fact]
     public async Task SendAsync_WhenTheApiAcceptsTheToken_MustNotNavigate()
     {
         // Arrange
@@ -77,12 +94,13 @@ public class BearerTokenHandlerTests
     private HttpClient CreateClient(ClaimsPrincipal user, HttpStatusCode respondWith)
     {
         _inner.RespondWith = respondWith;
-        var handler = new BearerTokenHandler(new FakeAuthenticationStateProvider(user), _navigation) { InnerHandler = _inner };
+        var handler = new BearerTokenHandler(new FakeAuthenticationStateProvider(user), _navigation, _logger) { InnerHandler = _inner };
         return new HttpClient(handler);
     }
 
     private readonly RecordingHandler _inner = new();
     private readonly TestNavigationManager _navigation = new();
+    private readonly FakeLogger<BearerTokenHandler> _logger = new();
 
     private sealed class RecordingHandler : HttpMessageHandler
     {

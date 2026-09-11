@@ -492,6 +492,51 @@ Three additions and no change to the workflow's logic:
 2. a federated credential whose subject names the trigger for that environment - for a GitHub environment with required reviewers, `repo:AntonioKoB@52575552/InfloTechTest@1357388560:environment:<env>`; for a release branch, the same prefix with `ref:refs/heads/<branch>` - so a token minted for one environment cannot deploy another;
 3. a second entry for the `infra` and deploy jobs (a matrix over the environment name, or a copy with `environment: <env>` set) that passes the parameter file and the resource group for that environment. The secrets can stay repository-wide or move to GitHub environment secrets, which is what `environment:` on a job is for.
 
+## Observability
+
+Both hosts send telemetry to the Application Insights component the template creates (`appi-inflo-<env>`) through the `Microsoft.ApplicationInsights.AspNetCore` SDK. The connection string reaches each site as the `APPLICATIONINSIGHTS_CONNECTION_STRING` app setting, written by the template; the SDK reads it from configuration, so there is no telemetry code beyond the registration.
+
+### What is collected
+
+| Signal | `UserManagement.Api` | `UserManagement.Blazor` |
+|---|---|---|
+| Requests | every API call, with status and duration | every page request |
+| Dependencies | the SQL commands behind each request | the HTTP calls to the API |
+| Exceptions | unhandled exceptions, attached to the request that raised them | the same, including circuit errors |
+| Logs | `ILogger` output at the levels set in `appsettings.json` | the same |
+
+The Blazor host's calls to the API carry W3C trace context, so a page request, the API request it triggered and that request's SQL commands appear as one end-to-end transaction. Sampling is the SDK's default rate-limited sampler, untouched. There is no browser-side snippet: the UI is server-rendered, so the server sees every interaction already.
+
+### Handled errors are logged where they are handled
+
+Unhandled exceptions are recorded by the framework with no code of this project's own. A handled error would otherwise vanish into its response, so each place that handles one logs it with a fixed event id. The messages are source-generated `LoggerMessage` methods, which keeps the templates typed and costs nothing when a level is switched off. Credentials and tokens never appear in a message.
+
+| Event | Where | Level |
+|---|---|---|
+| Login rejected (the email, never the password) | API `AuthController`, Blazor `AuthEndpoints` | Warning |
+| Email already in use on a create or an update | API `UsersController` | Warning |
+| User no longer exists when an update is saved | API `UsersController` | Warning |
+| The API rejected the session token (method and path, never the token) | Blazor `BearerTokenHandler` | Warning |
+| The API rejected the logout; signed out locally anyway | Blazor `AuthEndpoints` | Warning |
+| Antiforgery validation failed on a login or logout post | Blazor `AuthEndpoints` | Warning |
+| User or log entry not found by id | API `UsersController`, `LogsController` | Information |
+
+### Where to look
+
+In the portal, open the `appi-inflo-<env>` resource:
+
+- **Transaction search** lists individual requests. Opening one shows its dependencies, exceptions and log lines on one timeline, across both hosts.
+- **Failures** groups failed requests, failed dependencies and exceptions by operation, with the exception details.
+- **Logs** runs KQL over the same data. `requests | take 5`, `dependencies | where type == "SQL"` and `traces | where severityLevel >= 2` (Warning and above) are useful first queries.
+
+### Locally
+
+A local run sends nothing. Without `APPLICATIONINSIGHTS_CONNECTION_STRING` the SDK is not registered at all (`AddApiTelemetry` in the API, `AddBlazorTelemetry` in the Blazor host), so startup is unchanged and there is no warning about the missing setting. To point a local run at the deployed component, put its connection string in the host's user secrets under that key. The log lines above reach the console either way.
+
+### Cost
+
+Ingestion is free for the first 5 GB per month per workspace, and the workspace's daily cap (see [Infrastructure](#infrastructure)) keeps this environment well inside that. Ninety days of retention are included.
+
 ## Points to improve
 
 Known gaps, in the order they would be tackled:

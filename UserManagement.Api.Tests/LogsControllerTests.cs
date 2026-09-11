@@ -1,6 +1,8 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using UserManagement.Api.Contracts.Logs;
 using UserManagement.Api.Controllers;
 using UserManagement.Models;
@@ -105,6 +107,21 @@ public class LogsControllerTests
     }
 
     [Fact]
+    public async Task GetById_WhenLogDoesNotExist_MustLogTheMissingIdAtInformation()
+    {
+        // Arrange
+        var controller = CreateController();
+        _userLogService.Setup(s => s.GetByIdAsync(It.IsAny<long>())).ReturnsAsync((UserLog?)null);
+
+        // Act
+        await controller.GetById(999);
+
+        // Assert
+        _logger.Collector.GetSnapshot().Should().ContainSingle()
+            .Which.Should().Match<FakeLogRecord>(r => r.Level == LogLevel.Information && r.Message.Contains("999"));
+    }
+
+    [Fact]
     public async Task GetById_ForViewedAction_MustReturnEmptyChangesList()
     {
         // Arrange
@@ -140,5 +157,6 @@ public class LogsControllerTests
 
     private readonly Mock<IUserLogService> _userLogService = new();
     private readonly Mock<IUserLogDiffBuilder> _diffBuilder = new();
-    private LogsController CreateController() => new(_userLogService.Object, _diffBuilder.Object);
+    private readonly FakeLogger<LogsController> _logger = new();
+    private LogsController CreateController() => new(_userLogService.Object, _diffBuilder.Object, _logger);
 }

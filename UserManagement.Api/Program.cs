@@ -7,6 +7,7 @@ using Scalar.AspNetCore;
 using UserManagement.Api.Auth;
 using UserManagement.Api.Caching;
 using UserManagement.Api.Health;
+using UserManagement.Api.Telemetry;
 using UserManagement.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,7 +17,8 @@ builder.Services
     .AddDomainServices()
     .AddJwtAuthentication(builder.Configuration, builder.Environment)
     .AddApiHealthChecks()
-    .AddApiOutputCaching();
+    .AddApiOutputCaching()
+    .AddApiTelemetry(builder.Configuration);
 
 builder.Services
     .AddControllers()

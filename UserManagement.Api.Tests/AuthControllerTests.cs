@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using UserManagement.Api.Auth;
 using UserManagement.Api.Contracts.Auth;
 using UserManagement.Api.Controllers;
@@ -86,6 +88,24 @@ public class AuthControllerTests
     }
 
     [Fact]
+    public async Task Login_WhenCredentialsAreInvalid_MustLogTheEmailAtWarningWithoutThePassword()
+    {
+        // Arrange
+        // A run of these for one email is what a guessing attempt looks like, so it is a Warning. The
+        // submitted password must never reach a log.
+        var controller = CreateController();
+        _credentialService.Setup(s => s.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync((User?)null);
+
+        // Act
+        await controller.Login(new LoginRequest { Email = "nobody@example.com", Password = "wrong-secret" });
+
+        // Assert
+        var record = _logger.Collector.GetSnapshot().Should().ContainSingle().Which;
+        record.Level.Should().Be(LogLevel.Warning);
+        record.Message.Should().Contain("nobody@example.com").And.NotContain("wrong-secret");
+    }
+
+    [Fact]
     public async Task Logout_MustEndTheSessionOfTheUserNamedInTheBearerToken()
     {
         // Arrange
@@ -131,5 +151,6 @@ public class AuthControllerTests
 
     private readonly Mock<ICredentialService> _credentialService = new();
     private readonly Mock<IJwtTokenService> _jwtTokenService = new();
-    private AuthController CreateController() => new(_credentialService.Object, _jwtTokenService.Object);
+    private readonly FakeLogger<AuthController> _logger = new();
+    private AuthController CreateController() => new(_credentialService.Object, _jwtTokenService.Object, _logger);
 }

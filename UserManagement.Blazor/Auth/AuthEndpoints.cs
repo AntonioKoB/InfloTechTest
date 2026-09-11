@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Logging;
 using Refit;
 using UserManagement.Api.Contracts.Auth;
 using UserManagement.Blazor.Api;
@@ -18,7 +19,7 @@ namespace UserManagement.Blazor.Auth;
 /// circuit events) because only an HTTP response can set or clear the auth cookie, and both require the
 /// antiforgery token so a third-party page cannot forge them.
 /// </summary>
-public static class AuthEndpoints
+public static partial class AuthEndpoints
 {
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder endpoints)
     {
@@ -28,9 +29,14 @@ public static class AuthEndpoints
     }
 
     [RequireAntiforgeryToken]
-    public static async Task<IResult> LoginAsync([FromForm] LoginRequest request, [FromForm] string? returnUrl, IAuthApi authApi, HttpContext httpContext)
+    public static async Task<IResult> LoginAsync([FromForm] LoginRequest request, [FromForm] string? returnUrl, IAuthApi authApi, HttpContext httpContext, ILoggerFactory loggerFactory)
     {
-        if (!AntiforgeryValidationPassed(httpContext)) return AntiforgeryFailure();
+        var logger = CreateLogger(loggerFactory);
+        if (!AntiforgeryValidationPassed(httpContext))
+        {
+            LogAntiforgeryValidationFailed(logger, "login");
+            return AntiforgeryFailure();
+        }
 
         LoginResponse login;
         try
@@ -39,6 +45,7 @@ public static class AuthEndpoints
         }
         catch (ApiException ex) when (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.BadRequest)
         {
+            LogLoginRejected(logger, request.Email, ex.StatusCode);
             return Results.Redirect("/login?error=1");
         }
 
@@ -58,9 +65,14 @@ public static class AuthEndpoints
     }
 
     [RequireAntiforgeryToken]
-    public static async Task<IResult> LogoutAsync(HttpContext httpContext, IAuthApi authApi)
+    public static async Task<IResult> LogoutAsync(HttpContext httpContext, IAuthApi authApi, ILoggerFactory loggerFactory)
     {
-        if (!AntiforgeryValidationPassed(httpContext)) return AntiforgeryFailure();
+        var logger = CreateLogger(loggerFactory);
+        if (!AntiforgeryValidationPassed(httpContext))
+        {
+            LogAntiforgeryValidationFailed(logger, "logout");
+            return AntiforgeryFailure();
+        }
 
         // Tell the API first so the sign-out is audited against the session's token. If the API already
         // rejects that token (expired), the local sign-out still goes ahead - the cookie is what keeps the
@@ -72,8 +84,9 @@ public static class AuthEndpoints
             {
                 await authApi.LogoutAsync(token);
             }
-            catch (ApiException)
+            catch (ApiException ex)
             {
+                LogApiLogoutFailed(logger, ex.StatusCode);
             }
         }
 
@@ -99,4 +112,18 @@ public static class AuthEndpoints
     // that was not validated (no form body, or a forged one) is rejected before it can touch the sign-in state.
     private static bool AntiforgeryValidationPassed(HttpContext httpContext)
         => httpContext.Features.Get<IAntiforgeryValidationFeature>() is { IsValid: true };
+
+    // A static class cannot be a type argument, so ILogger<AuthEndpoints> is not available; the factory gives
+    // the same category name.
+    private static ILogger CreateLogger(ILoggerFactory loggerFactory) => loggerFactory.CreateLogger(typeof(AuthEndpoints));
+
+    // Handled errors, logged where they are handled. The password is never logged.
+    [LoggerMessage(EventId = 2001, Level = LogLevel.Warning, Message = "Login rejected by the API for {Email} ({StatusCode})")]
+    private static partial void LogLoginRejected(ILogger logger, string email, HttpStatusCode statusCode);
+
+    [LoggerMessage(EventId = 2002, Level = LogLevel.Warning, Message = "Antiforgery validation failed for the {Endpoint} post")]
+    private static partial void LogAntiforgeryValidationFailed(ILogger logger, string endpoint);
+
+    [LoggerMessage(EventId = 2003, Level = LogLevel.Warning, Message = "The API rejected the logout ({StatusCode}); signing out locally anyway")]
+    private static partial void LogApiLogoutFailed(ILogger logger, HttpStatusCode statusCode);
 }
