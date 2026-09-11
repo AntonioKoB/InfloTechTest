@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using UserManagement.Data;
 using UserManagement.Models;
 using UserManagement.Services.Domain.Interfaces;
 
@@ -18,7 +17,7 @@ public class AuditingUserService : IUserService
     private readonly IUserService _inner;
     private readonly IUserLogService _userLogService;
 
-    public AuditingUserService(IUserService inner, IUserLogService userLogService, IDataContext dataAccess)
+    public AuditingUserService(IUserService inner, IUserLogService userLogService)
     {
         _inner = inner;
         _userLogService = userLogService;

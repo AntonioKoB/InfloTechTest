@@ -67,20 +67,14 @@ public partial class UsersController : ControllerBase
         return Ok(logs.Select(l => l.ToDto()));
     }
 
-    // The three writes are accepted here and executed by the worker. The command is marked Pending before it
-    // is published: the worker can finish before this request returns, and a later Pending mark would
-    // overwrite its outcome.
+    // The three writes are accepted here and executed by the worker; see AcceptAsync.
 
     [HttpPost]
     public async Task<ActionResult<CommandAcceptedResponse>> Create(CreateUserRequest request)
     {
         var user = request.ToUser();
         _credentialService.SetPassword(user, request.Password);
-        var command = user.ToCreateCommand(Guid.NewGuid());
-
-        await _statusStore.MarkPendingAsync(command.CommandId);
-        await _messageBus.PublishAsync(command);
-        return AcceptedAtAction(nameof(CommandsController.GetStatus), "Commands", new { id = command.CommandId }, new CommandAcceptedResponse { CommandId = command.CommandId });
+        return await AcceptAsync(user.ToCreateCommand(Guid.NewGuid()));
     }
 
     [HttpPut("{id:long}")]
@@ -101,16 +95,18 @@ public partial class UsersController : ControllerBase
             passwordHash = user.PasswordHash;
         }
 
-        var command = user.ToUpdateCommand(Guid.NewGuid(), passwordHash);
-        await _statusStore.MarkPendingAsync(command.CommandId);
-        await _messageBus.PublishAsync(command);
-        return AcceptedAtAction(nameof(CommandsController.GetStatus), "Commands", new { id = command.CommandId }, new CommandAcceptedResponse { CommandId = command.CommandId });
+        return await AcceptAsync(user.ToUpdateCommand(Guid.NewGuid(), passwordHash));
     }
 
     [HttpDelete("{id:long}")]
     public async Task<ActionResult<CommandAcceptedResponse>> Delete(long id)
+        => await AcceptAsync(new DeleteUserCommand(Guid.NewGuid(), id));
+
+    // Marks the command Pending before publishing it: the worker can finish before this request returns, and
+    // a Pending mark written after the publish would overwrite its outcome. The 202 points at the status
+    // endpoint through the Location header and carries the same id in the body.
+    private async Task<ActionResult<CommandAcceptedResponse>> AcceptAsync(ICommand command)
     {
-        var command = new DeleteUserCommand(Guid.NewGuid(), id);
         await _statusStore.MarkPendingAsync(command.CommandId);
         await _messageBus.PublishAsync(command);
         return AcceptedAtAction(nameof(CommandsController.GetStatus), "Commands", new { id = command.CommandId }, new CommandAcceptedResponse { CommandId = command.CommandId });

@@ -5,6 +5,10 @@ using UserManagement.Services.Domain.Interfaces;
 
 namespace UserManagement.Services.Commands;
 
+/// <summary>
+/// Creates the user through the decorated IUserService (uniqueness check, caching) and records the Created
+/// entry once the row exists, so the snapshot carries the generated id.
+/// </summary>
 public class CreateUserCommandHandler : ICommandHandler<CreateUserCommand>
 {
     private readonly IUserService _userService;

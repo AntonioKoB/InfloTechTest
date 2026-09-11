@@ -5,6 +5,10 @@ using UserManagement.Services.Domain.Interfaces;
 
 namespace UserManagement.Services.Commands;
 
+/// <summary>
+/// Deletes the user (idempotent: an already-gone user is not an error) and records a Deleted entry with the
+/// last known state as its "before" snapshot when there was a user to delete.
+/// </summary>
 public class DeleteUserCommandHandler : ICommandHandler<DeleteUserCommand>
 {
     private readonly IUserService _userService;

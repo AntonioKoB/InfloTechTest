@@ -1,6 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using UserManagement.Data;
 using UserManagement.Models;
 using UserManagement.Services.Domain.Implementations;
 using UserManagement.Services.Domain.Interfaces;
@@ -111,6 +110,5 @@ public class AuditingUserServiceTests
 
     private readonly Mock<IUserService> _inner = new();
     private readonly Mock<IUserLogService> _userLogService = new();
-    private readonly Mock<IDataContext> _dataContext = new();
-    private AuditingUserService CreateService() => new(_inner.Object, _userLogService.Object, _dataContext.Object);
+    private AuditingUserService CreateService() => new(_inner.Object, _userLogService.Object);
 }

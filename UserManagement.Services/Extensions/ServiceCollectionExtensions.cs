@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Identity;
-using UserManagement.Data;
 using UserManagement.Models;
 using UserManagement.Services.Caching;
 using UserManagement.Services.Commands;
@@ -23,8 +22,7 @@ public static class ServiceCollectionExtensions
             // Auditing wraps caching on purpose: a read served from the cache is still recorded as a view.
             .AddScoped<IUserService>(sp => new AuditingUserService(
                 new CachingUserService(sp.GetRequiredService<UserService>(), sp.GetRequiredService<ICache>()),
-                sp.GetRequiredService<IUserLogService>(),
-                sp.GetRequiredService<IDataContext>()))
+                sp.GetRequiredService<IUserLogService>()))
             .AddScoped<ICommandHandler<CreateUserCommand>, CreateUserCommandHandler>()
             .AddScoped<ICommandHandler<UpdateUserCommand>, UpdateUserCommandHandler>()
             .AddScoped<ICommandHandler<DeleteUserCommand>, DeleteUserCommandHandler>()

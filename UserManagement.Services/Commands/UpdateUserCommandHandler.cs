@@ -6,6 +6,11 @@ using UserManagement.Services.Domain.Interfaces;
 
 namespace UserManagement.Services.Commands;
 
+/// <summary>
+/// Re-reads the user in the worker's own scope, applies the command's fields to that instance and saves it,
+/// recording an Updated entry whose "before" snapshot is a copy taken before the fields were applied. A user
+/// that vanished since the API accepted the command fails the command rather than silently doing nothing.
+/// </summary>
 public class UpdateUserCommandHandler : ICommandHandler<UpdateUserCommand>
 {
     private readonly IUserService _userService;
