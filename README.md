@@ -75,8 +75,8 @@ Add additional layers to the application that will ensure that it is scaleable w
 | `UserManagement.Data` | EF Core `DataContext`, entities and migrations. |
 | `UserManagement.Services` | Domain services (`IUserService`, `IUserLogService`, audit-log decorator, diff builder), the commands and their handlers, the message bus and the command status store. |
 | `UserManagement.Api` | REST API over the domain services, and the worker that executes commands. Owns all database access. |
-| `UserManagement.Api.Contracts` | DTOs and enums making up the API's public contract. Referenced by both the API and its clients, and deliberately free of any ASP.NET Core dependency. |
-| `UserManagement.Blazor` | Blazor Server UI. Talks to the API over HTTP and never touches the service or data layers directly. |
+| `UserManagement.Api.Contracts` | DTOs and enums making up the API's public contract. Referenced by both the API and its clients, with no ASP.NET Core dependency. |
+| `UserManagement.Blazor` | Blazor Server UI. Talks to the API over HTTP and does not reference the service or data layers. |
 
 Each has a matching `*.Tests` project, except `UserManagement.Api.Contracts`, which is DTOs only.
 
@@ -146,7 +146,7 @@ If the `User`/`UserLog` model changes, generate a new migration from the reposit
 dotnet ef migrations add <MigrationName> --project UserManagement.Data
 ```
 
-No `--startup-project` is needed: `UserManagement.Data` carries the EF Core design-time package and a design-time factory (`DataContextFactory`), so the tooling builds the model from the data project alone and the API's startup code - including its `Database.Migrate()` call - never runs during scaffolding.
+No `--startup-project` is needed: `UserManagement.Data` carries the EF Core design-time package and a design-time factory (`DataContextFactory`), so the tooling builds the model from the data project alone, and the API's startup code, including `Database.Migrate()`, does not run during scaffolding.
 
 Commit the generated files under `UserManagement.Data/Migrations` - they're applied automatically the next time the app starts, no separate `database update` step needed.
 
@@ -168,15 +168,15 @@ The Blazor app's authentication cookie is protected with ASP.NET Core Data Prote
 
 The original `UserManagement.Web` MVC application has been removed. Users and Logs were its entire surface area, so once both moved to Blazor there was nothing left for it to serve, and leaving an empty shell project behind would only have added a second thing to run and maintain.
 
-### A new project rather than converting the MVC one
+### Replacing the MVC project
 
-The Blazor UI is a new project rather than an in-place conversion of `UserManagement.Web`. Converting would have meant stripping out MVC controllers, views, view models and the bundling middleware while simultaneously adding Blazor's hosting model to the same project - a single tangled changeset where additions and removals are hard to review separately. As two distinct operations, "add the new app" and "delete the old one" each stand on their own and read clearly in isolation.
+The Blazor UI is a new project; `UserManagement.Web` was not converted in place. Converting would have meant stripping out MVC controllers, views, view models and the bundling middleware while simultaneously adding Blazor's hosting model to the same project - a single tangled changeset where additions and removals are hard to review separately. As two distinct operations, "add the new app" and "delete the old one" each stand on their own and read clearly in isolation.
 
-### Blazor Server rather than WebAssembly
+### Hosting model: Blazor Server
 
 The UI runs on Blazor Server. Both hosting models share the same component model, so the choice comes down to where component code executes and what that implies:
 
-- **Security surface.** The API token never reaches browser script: it lives inside an encrypted, HttpOnly authentication cookie issued by the Blazor host and is attached to API calls on the server (see [Authentication](#authentication)). A WebAssembly client must hold its token in browser-accessible storage, which makes XSS a token-theft risk and is why production SPAs frequently front themselves with a backend-for-frontend to avoid exactly that.
+- **Security surface.** The API token never reaches browser script: it lives inside an encrypted, HttpOnly authentication cookie issued by the Blazor host and is attached to API calls on the server (see [Authentication](#authentication)). A WebAssembly client must hold its token in browser-accessible storage, which makes XSS a token-theft risk; production SPAs often add a backend-for-frontend for that reason.
 - **No CORS.** Component code runs server-side, so calls to the API are ordinary server-to-server requests with no browser origin involved. CORS is a browser-enforced mechanism and simply doesn't apply.
 - **No payload download.** There is no .NET runtime to download before first render.
 
@@ -191,7 +191,7 @@ Note that the API boundary is real regardless of this choice: the Blazor app dep
 - **[Markdig](https://github.com/xoofx/markdig)** to render this README into the Requirements panel on the home page.
 - **[bUnit](https://bunit.dev/)** for component tests.
 
-A few styles that apply to markup rendered by MudBlazor or the built-in input components live in `wwwroot/app.css` rather than in component-scoped `.razor.css` files. Blazor's CSS isolation only tags elements written directly in a component's own markup, so scoped rules never reach elements a child component renders.
+A few styles that apply to markup rendered by MudBlazor or the built-in input components live in `wwwroot/app.css`, not in component-scoped `.razor.css` files. Blazor's CSS isolation only tags elements written directly in a component's own markup, so scoped rules do not reach elements a child component renders.
 
 ### Credentials
 
@@ -232,7 +232,7 @@ Any random value works (for example the output of `openssl rand -base64 48`). Ro
 4. Every API call the Blazor app makes goes through `BearerTokenHandler`, which attaches the token as an `Authorization: Bearer` header. A 401 from the API forces a full reload of the sign-in page.
 5. `POST /logout`, also antiforgery-protected, tells the API the session has ended (`POST /api/auth/logout`, bearer-authenticated) and clears the cookie.
 
-Signing in and signing out are recorded in the audit log as `LoggedIn` and `LoggedOut` entries against the user, alongside the existing Created/Viewed/Updated/Deleted actions. They mark session boundaries rather than changes, so they carry no snapshot and never show a diff. Failed sign-in attempts are not recorded: there is no verified user to attribute them to.
+Signing in and signing out are recorded in the audit log as `LoggedIn` and `LoggedOut` entries against the user, alongside the existing Created/Viewed/Updated/Deleted actions. They mark session boundaries, so they carry no snapshot and show no diff. Failed sign-in attempts are not recorded: there is no verified user to attribute them to.
 
 On the API, `UsersController` and `LogsController` carry `[Authorize]` and `AuthController.Login` carries `[AllowAnonymous]`; validation is the standard JWT bearer scheme. The API is bearer-only and sets no cookies, so cross-site request forgery does not apply to it. The antiforgery validation lives on the Blazor host's two form posts, the only requests that change the browser's sign-in state; a post without the token is rejected with a 400.
 
@@ -242,7 +242,7 @@ On the API, `UsersController` and `LogsController` carry `[Authorize]` and `Auth
 
 #### Next steps
 
-Deliberate omissions, kept out to hold the scope to what the exercise asks for. Each is a small, self-contained change:
+Left out to keep the scope to what the exercise asks for. Each is a small, self-contained change:
 
 - **Token revocation.** Tokens are stateless and stay valid until they expire. `ICredentialService.SignOutAsync` is the hook where a revocation list (or a shorter lifetime plus refresh tokens) would go; today it only records the audit entry.
 - **Hash upgrades on sign-in.** `PasswordHasher` reports `SuccessRehashNeeded` when a stored hash uses an older format or work factor; the result is accepted, but the hash is not rewritten.
@@ -258,19 +258,19 @@ Deliberate omissions, kept out to hold the scope to what the exercise asks for. 
 
 ### API client (Blazor)
 
-The Blazor app's calls to `UserManagement.Api` (via the `IAuthApi`, `IUsersApi` and `ILogsApi` Refit clients) go through [`Microsoft.Extensions.Http.Resilience`](https://learn.microsoft.com/dotnet/core/resilience/http-resilience) - Microsoft's own resilience package, built on [Polly](https://github.com/App-vNext/Polly) v8. It's wired in `UserManagement.Blazor/Program.cs` via `.AddStandardResilienceHandler()` on each `HttpClient`, which bundles retry (with exponential backoff), a per-attempt and total-request timeout, a circuit breaker, and a concurrency rate limiter in one call, rather than hand-wiring individual Polly policies.
+The Blazor app's calls to `UserManagement.Api` (via the `IAuthApi`, `IUsersApi` and `ILogsApi` Refit clients) go through [`Microsoft.Extensions.Http.Resilience`](https://learn.microsoft.com/dotnet/core/resilience/http-resilience) - Microsoft's own resilience package, built on [Polly](https://github.com/App-vNext/Polly) v8. It's wired in `UserManagement.Blazor/Program.cs` via `.AddStandardResilienceHandler()` on each `HttpClient`, which bundles retry (with exponential backoff), a per-attempt and total-request timeout, a circuit breaker, and a concurrency rate limiter in one call, so no individual Polly policies are hand-wired.
 
 ### API to database
 
-The API's SQL Server provider is registered with `EnableRetryOnFailure` (`AddDataAccess`, in `UserManagement.Data`), which runs every query and `SaveChanges` under EF Core's retrying execution strategy. It retries only the error numbers the provider classifies as transient - the throttling, failover and dropped-connection faults a hosted database such as Azure SQL is documented to raise - and never a genuine failure like a constraint violation. The budget is three retries with an exponential backoff capped at five seconds, roughly nine seconds worst case, chosen to sit inside the Blazor client's ten-second per-attempt timeout: the client already retries, so the API giving up quickly on a request avoids both layers retrying on top of each other. The startup `Database.Migrate()` call runs under the same strategy, so a database that is still waking up when the API starts is retried rather than crashing the process. Nothing in the data layer opens a user-initiated transaction, so no `CreateExecutionStrategy().ExecuteAsync(...)` wrapping is required.
+The API's SQL Server provider is registered with `EnableRetryOnFailure` (`AddDataAccess`, in `UserManagement.Data`), which runs every query and `SaveChanges` under EF Core's retrying execution strategy. It retries only the error numbers the provider classifies as transient - the throttling, failover and dropped-connection faults a hosted database such as Azure SQL is documented to raise - and not a genuine failure such as a constraint violation. The budget is three retries with an exponential backoff capped at five seconds, roughly nine seconds worst case, chosen to sit inside the Blazor client's ten-second per-attempt timeout: the client already retries, so the API giving up quickly on a request avoids both layers retrying on top of each other. The startup `Database.Migrate()` call runs under the same strategy, so a database that is still waking up when the API starts is retried and the process does not crash. Nothing in the data layer opens a user-initiated transaction, so no `CreateExecutionStrategy().ExecuteAsync(...)` wrapping is required.
 
-There is deliberately no circuit breaker between the API and the database. A breaker earns its place where there is somewhere else to send the traffic, or a cheaper failure to fall back to - the Blazor app's breaker fails fast to an error message instead of hanging a circuit. In front of the only database there is no fallback: a breaker would turn a slow database into a hard outage for the duration of the break, which is worse than a bounded retry.
+There is no circuit breaker between the API and the database. A breaker earns its place where there is somewhere else to send the traffic, or a cheaper failure to fall back to - the Blazor app's breaker fails fast to an error message instead of hanging a circuit. In front of the only database there is no fallback: a breaker would turn a slow database into a hard outage for the duration of the break, which is worse than a bounded retry.
 
 For Azure SQL specifically, EF Core also offers `UseAzureSql()` in place of `UseSqlServer()`; it supersedes the now-obsolete `UseAzureSqlDefaults`, whose defaults are documented as "including retries on errors". Switching is a one-line change in `AddDataAccess` once the deployment target is confirmed as Azure SQL.
 
 ### Health checks
 
-Both hosts expose `GET /health` for the platform's health probes (App Service's Health check feature, a load balancer, a container orchestrator). The endpoints are anonymous on purpose - probes carry no token - and return plain text: `Healthy` with a 200, or `Unhealthy` with a 503.
+Both hosts expose `GET /health` for the platform's health probes (App Service's Health check feature, a load balancer, a container orchestrator). The endpoints are anonymous, since probes carry no token, and return plain text: `Healthy` with a 200, or `Unhealthy` with a 503.
 
 - `UserManagement.Api` (`https://localhost:7085/health` locally) includes a database connectivity check (`AddDbContextCheck<DataContext>`), so a process that is up but cannot reach its database reports as down and can be taken out of rotation.
 - `UserManagement.Blazor` (`https://localhost:7086/health` locally) is a liveness check only. The host has no database of its own; its dependency on the API is already covered by the API's probe and by the client-side circuit breaker above.
@@ -285,19 +285,19 @@ Two reads are cached, each with the cache that matches the kind of read it is. A
 
 `GET /api/users` is served through ASP.NET Core output caching under a named policy (`OutputCachingExtensions`, in `UserManagement.Api/Caching`). Each `filter` value is its own cached response, every entry is tagged `users`, and the worker evicts the tag the moment a create, update or delete command completes (see [Message bus and worker](#message-bus-and-worker)), so an edit that moves a user between the Active and Non-active lists is correct as soon as the command is. A command that failed (a duplicate email, a user that vanished) changed nothing and leaves the cache alone. A five-minute expiry backs the eviction, so anything that writes to the database around the API self-heals, and the store's size limit bounds the memory used.
 
-Output caching refuses to cache any request that carries an `Authorization` header, and refuses again after the response when the user turned out to be authenticated - the safe assumption that an authenticated response is personal. The users list is the same for every signed-in caller, so `CacheAuthenticatedRequestsPolicy`, appended to that one policy, opts it back in under the framework's other rules (a GET, a 200, no cookie). Nothing else in the API is output-cached, and `UseOutputCache` sits after authorization, so an unauthenticated caller still gets a 401 and never a cached body.
+Output caching refuses to cache any request that carries an `Authorization` header, and refuses again after the response when the user turned out to be authenticated - the safe assumption that an authenticated response is personal. The users list is the same for every signed-in caller, so `CacheAuthenticatedRequestsPolicy`, appended to that one policy, opts it back in under the framework's other rules (a GET, a 200, no cookie). Nothing else in the API is output-cached, and `UseOutputCache` sits after authorization, so an unauthenticated caller still gets a 401; no cached body is served.
 
 ### A single user: a service-layer cache
 
 The single-user read is audited: expanding a row in the UI calls `GET /api/users/{id}?recordAsViewed=true`, and the "Viewed" entry is written by the auditing decorator around `IUserService`. An HTTP cache cannot serve that request without skipping the audit, so its cache is `CachingUserService`, a second decorator placed *beneath* the auditing one: `Auditing(Caching(UserService))`. A hit is served from memory and still recorded as a view; the composition test in `ServiceCollectionExtensionsTests` pins that order.
 
-The decorator caches a user by id for five minutes and hands out copies, never the cached instance, because the API's update flow edits the fetched user in place before saving it. Update and Delete invalidate that user whether or not they succeed - a failed save can mean the row changed or vanished underneath, and the cost is one extra read. Misses are not remembered, since an id that does not exist now may after the next create. The lists (cached above), the email lookup (uniqueness checks and sign-in must see the database) and the logs (append-only, changing on every audited action) pass straight through.
+The decorator caches a user by id for five minutes and hands out copies, because the API's update flow edits the fetched user in place before saving it. Update and Delete invalidate that user whether or not they succeed - a failed save can mean the row changed or vanished underneath, and the cost is one extra read. Misses are not remembered, since an id that does not exist now may after the next create. The lists (cached above), the email lookup (uniqueness checks and sign-in must see the database) and the logs (append-only, changing on every audited action) pass straight through.
 
 The decorator depends on `ICache`, a three-method contract (`GetAsync`, `SetAsync` with a time-to-live, `RemoveAsync`) implemented by `MemoryCacheAdapter` over the framework's in-process `IMemoryCache`. Swapping the store means one new adapter and one registration line.
 
-### Two invalidation paths, on purpose
+### Two invalidation paths
 
-An update or a delete therefore invalidates in two places: the worker evicts the list tag when the command completes, and the decorator removes the user's key as the handler writes through it. They sit side by side deliberately - each cache is invalidated by the layer that owns it - and the boundary between them is the rule at the top of this section. Both happen when the row actually changes, never when the API merely accepts the request.
+An update or a delete therefore invalidates in two places: the worker evicts the list tag when the command completes, and the decorator removes the user's key as the handler writes through it. Each cache is invalidated by the layer that owns it; the boundary between them is the rule at the top of this section. Both happen once the row has changed; accepting the request changes nothing.
 
 ### Production: Redis
 
@@ -309,7 +309,7 @@ Every pull request, and every push to `main`, runs the `CI` workflow (`.github/w
 
 A newer push to the same branch cancels the run it supersedes (`concurrency` with `cancel-in-progress`), so a pull request only ever has one run in flight. The test results are uploaded as a `test-results` artifact (one `.trx` per test project) whether the run passes or fails, so a failure can be diagnosed from the run page without reproducing it locally. The badge at the top of this file tracks the latest run on `main`.
 
-The workflow runs exactly what a local build does, so the same three commands reproduce it from the repository root:
+The workflow runs the same commands as a local build, so these three reproduce it from the repository root:
 
 ```bash
 dotnet restore
@@ -319,7 +319,7 @@ dotnet test --configuration Release --no-build
 
 ## Infrastructure
 
-Everything the two hosts need on Azure is declared in one Bicep template, `infra/main.bicep`, deployed at resource-group scope, with one parameter file per environment (`infra/dev.bicepparam` today). Bicep rather than Terraform because there is no state file to host or lock - Azure Resource Manager is the state - and the only tooling is the Azure CLI that a deployment pipeline already needs. The environment name is a parameter and appears in every resource name, so a new environment is one more parameter file. The web apps and the SQL server carry a `uniqueString(resourceGroup().id)` suffix because their names must be unique across all of Azure; everything else follows the `<type>-inflo-<environment>` convention.
+Everything the two hosts need on Azure is declared in one Bicep template, `infra/main.bicep`, deployed at resource-group scope, with one parameter file per environment (`infra/dev.bicepparam` today). Bicep was chosen over Terraform because there is no state file to host or lock - Azure Resource Manager is the state - and the only tooling is the Azure CLI that a deployment pipeline already needs. The environment name is a parameter and appears in every resource name, so a new environment is one more parameter file. The web apps and the SQL server carry a `uniqueString(resourceGroup().id)` suffix because their names must be unique across all of Azure; everything else follows the `<type>-inflo-<environment>` convention.
 
 | Resource | Name | Tier |
 |---|---|---|
@@ -353,7 +353,7 @@ The settings listed under [Production (Azure)](#5-production-azure) are all comp
 | both | `APPLICATIONINSIGHTS_CONNECTION_STRING` | the Application Insights component |
 | both | `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | `true`, see above |
 
-The template is the source of truth for configuration: each deployment replaces the app settings with exactly this set, so a value added by hand in the portal does not survive the next deployment. The SQL server's firewall has the `AllowAllWindowsAzureIps` rule (0.0.0.0), which admits connections from Azure services only; the API needs it because it runs the EF Core migrations at startup. The template outputs both hostnames, both site names, the SQL server FQDN and the Application Insights connection string, which is what a deployment pipeline needs next.
+The template is the source of truth for configuration: each deployment replaces the app settings with this set, so a value added by hand in the portal does not survive the next deployment. The SQL server's firewall has the `AllowAllWindowsAzureIps` rule (0.0.0.0), which admits connections from Azure services only; the API needs it because it runs the EF Core migrations at startup. The template outputs both hostnames, both site names, the SQL server FQDN and the Application Insights connection string, which is what a deployment pipeline needs next.
 
 ### Deploying
 
@@ -462,7 +462,7 @@ Done once per subscription from a shell logged in with `az login` and `gh auth l
     gh secret set JWT_SIGNING_KEY
     ```
 
-    Without `--body` the command prompts for the value, so a secret never appears on a command line or in shell history. The last three must be the values the environment is already running with: the template writes the SQL password into the server and into the API's connection string on every run, so a different value is a password rotation rather than a deployment, and a different signing key invalidates every token already issued.
+    Without `--body` the command prompts for the value, so a secret never appears on a command line or in shell history. The last three must be the values the environment is already running with: the template writes the SQL password into the server and into the API's connection string on every run, so a different value amounts to a password rotation, and a different signing key invalidates every token already issued.
 
 ### What a run does
 
@@ -473,11 +473,11 @@ Done once per subscription from a shell logged in with `az login` and `gh auth l
 | `deploy-api`, `deploy-blazor` | `build`, `infra` | Download the artifact and `azure/webapps-deploy` it to the site named by the `infra` output |
 | `smoke` | both deploys | `GET /health` on each site until it answers `200 Healthy`, for up to three minutes |
 
-`build` and `infra` run in parallel: the template is idempotent and independent of the code. Both deploy jobs wait for both, so a failing test or a failed template stops the run before any site changes. The workflow sets no app setting of its own. The template owns the complete set (see [What the template wires](#what-the-template-wires)), so whatever `main.bicep` declares is what the sites run with after every deployment, and a value edited in the portal does not survive the next run. Deployments are serialised through a concurrency group that never cancels: a second push queues behind the running deployment instead of interrupting it half way, and CI runs, which use their own group, cannot cancel a deployment either.
+`build` and `infra` run in parallel: the template is idempotent and independent of the code. Both deploy jobs wait for both, so a failing test or a failed template stops the run before any site changes. The workflow sets no app setting of its own. The template owns the complete set (see [What the template wires](#what-the-template-wires)), so whatever `main.bicep` declares is what the sites run with after every deployment, and a value edited in the portal does not survive the next run. Deployments are serialised through a concurrency group that does not cancel: a second push queues behind the running deployment, and CI runs, which use their own group, cannot cancel a deployment either.
 
 ### Smoke test
 
-Both applications expose `GET /health` ([Health checks](#health-checks)). The API's check opens the database, so a `Healthy` answer proves three things at once: the site started, the EF Core migration ran, and the connection string the template composed is right. The Blazor check proves that host is serving. The Free tier has no Always On, so the first request after a deployment can take tens of seconds while the app starts; the job polls every ten seconds for up to three minutes and fails the run if either site never answers.
+Both applications expose `GET /health` ([Health checks](#health-checks)). The API's check opens the database, so a `Healthy` answer proves three things at once: the site started, the EF Core migration ran, and the connection string the template composed is right. The Blazor check proves that host is serving. The Free tier has no Always On, so the first request after a deployment can take tens of seconds while the app starts; the job polls every ten seconds for up to three minutes and fails the run if either site does not answer.
 
 ### Adding an environment
 
@@ -513,7 +513,7 @@ Unhandled exceptions are recorded by the framework with no code of this project'
 | User, log entry or command not found by id | API `UsersController`, `LogsController`, `CommandsController` | Information |
 | The worker stopped with the host | API `CommandWorker` | Information |
 
-The worker runs outside any request, so its SQL commands and its log lines appear as their own operations rather than under the request that accepted the command.
+The worker runs outside any request, so its SQL commands and its log lines appear as their own operations, separate from the request that accepted the command.
 
 ### Locally
 
@@ -529,9 +529,9 @@ Writes to users are not executed inside the HTTP request. The API validates the 
 
 ### The command flow
 
-1. `POST /api/users`, `PUT /api/users/{id}` and `DELETE /api/users/{id}` publish a `CreateUserCommand`, `UpdateUserCommand` or `DeleteUserCommand` (`UserManagement.Services/Commands`) and return `202 Accepted` with `{ "commandId": "…" }` in the body and a `Location` header pointing at `GET /api/commands/{commandId}`. The command is marked Pending before it is published, so the worker can never finish before the mark is written.
-2. `CommandWorker` (`UserManagement.Api/Commands`), a `BackgroundService`, consumes `IMessageBus` in order. Each command runs in its own dependency-injection scope through the `ICommandHandler<TCommand>` registered for its type. The handlers write through the same `IUserService` the API used to call directly, so the uniqueness check and the single-user cache behave exactly as before, and each returns the id of the user it affected.
-3. The outcome lands in `ICommandStatusStore`: Completed with that user id, or Failed with the exception message. A handler that throws never stops the worker; the failure is logged with the exception (event 1401, see [Observability](#observability)) and the next command is taken.
+1. `POST /api/users`, `PUT /api/users/{id}` and `DELETE /api/users/{id}` publish a `CreateUserCommand`, `UpdateUserCommand` or `DeleteUserCommand` (`UserManagement.Services/Commands`) and return `202 Accepted` with `{ "commandId": "…" }` in the body and a `Location` header pointing at `GET /api/commands/{commandId}`. The command is marked Pending before it is published, so the worker cannot finish before the mark is written.
+2. `CommandWorker` (`UserManagement.Api/Commands`), a `BackgroundService`, consumes `IMessageBus` in order. Each command runs in its own dependency-injection scope through the `ICommandHandler<TCommand>` registered for its type. The handlers write through the same `IUserService` the API used to call directly, so the uniqueness check and the single-user cache behave as before, and each returns the id of the user it affected.
+3. The outcome lands in `ICommandStatusStore`: Completed with that user id, or Failed with the exception message. A handler that throws does not stop the worker; the failure is logged with the exception (event 1401, see [Observability](#observability)) and the next command is taken.
 4. The audit log takes the same road. `IUserLogService.RecordAsync` builds the finished `UserLog` entry - snapshots serialized at the moment of the action - and publishes it as a `RecordUserLogCommand`; `RecordUserLogCommandHandler` writes it. Every entry (Created, Updated, Deleted, Viewed, LoggedIn, LoggedOut) is therefore written off the request path, and a user write and its log entry are decoupled from each other as well as from the request.
 
 ### The status endpoint
@@ -548,13 +548,13 @@ where `state` is `Pending`, `Completed` or `Failed`. `userId` is set once the co
 
 Model validation: an invalid body is a `400` immediately, as before. The caller made a mistake it can fix now, and there is nothing to queue. For the same reason `PUT` still checks that the user exists (`404`), and the password is hashed inside the request so that the command carries the hash and the clear-text password never reaches a transport. Everything that touches the database on a write happens in the worker.
 
-The Blazor UI treats the `202` as a promise, not a result: Add, Edit and Delete show a saving state and poll the status endpoint every 250 ms through a small client-side poller (`CommandPoller`, in `UserManagement.Blazor/Api`) until the command is Completed, then refresh what they show, or Failed, then show the reason in the form - the duplicate email lands where a validation error would. A command still Pending after 30 seconds is reported as a timeout rather than left spinning, because a command the API lost must never look like a slow one; a poll is also cancelled when its component is disposed, so a closed browser tab does not keep one running.
+The Blazor UI treats the `202` as a promise, not a result: Add, Edit and Delete show a saving state and poll the status endpoint every 250 ms through a small client-side poller (`CommandPoller`, in `UserManagement.Blazor/Api`) until the command is Completed, then refresh what they show, or Failed, then show the reason in the form - the duplicate email lands where a validation error would. A command still Pending after 30 seconds is reported as a timeout, so a lost command does not look like a slow one; a poll is also cancelled when its component is disposed, so a closed browser tab does not keep one running.
 
 ### Cost, and the limits that come with it
 
-The in-memory transport (`InMemoryMessageBus`, a `System.Threading.Channels` channel) and the in-memory status store (`InMemoryCommandStatusStore`, a `ConcurrentDictionary`) were chosen purely for cost: they need no Azure resource and add nothing to the bill. They are not durable across restarts and not shared across instances - a command accepted just before a restart is lost, and an instance only knows about the commands it accepted itself. Neither bites on a single free-tier instance, which is what the template deploys. A production deployment would use Azure Service Bus behind the same `IMessageBus` interface, so that the worker can move to its own host and scale independently of the API, and a table behind `ICommandStatusStore`, so that statuses survive restarts, are visible from every instance and can expire (the dictionary never forgets an entry).
+The in-memory transport (`InMemoryMessageBus`, a `System.Threading.Channels` channel) and the in-memory status store (`InMemoryCommandStatusStore`, a `ConcurrentDictionary`) were chosen purely for cost: they need no Azure resource and add nothing to the bill. They are not durable across restarts and not shared across instances - a command accepted just before a restart is lost, and an instance only knows about the commands it accepted itself. Neither bites on a single free-tier instance, which is what the template deploys. A production deployment would use Azure Service Bus behind the same `IMessageBus` interface, so that the worker can move to its own host and scale independently of the API, and a table behind `ICommandStatusStore`, so that statuses survive restarts, are visible from every instance and can expire (the dictionary keeps every entry).
 
-There is no outbox either. Marking a command Pending and publishing it, and writing a user and publishing its log entry, are each two operations rather than one transaction. The in-memory bus makes that harmless, since a publish cannot fail except at shutdown; a broker would not. The command table is where an outbox lands: the row inserted when the API accepts a command is both its durable queue entry and the status the caller polls, written in the same transaction as any business change, with the worker or a relay reading from it.
+There is no outbox either. Marking a command Pending and publishing it, and writing a user and publishing its log entry, are each two separate operations with no transaction around them. The in-memory bus makes that harmless, since a publish cannot fail except at shutdown; a broker would not. The command table is where an outbox lands: the row inserted when the API accepts a command is both its durable queue entry and the status the caller polls, written in the same transaction as any business change, with the worker or a relay reading from it.
 
 ## Points to improve
 
