@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Net;
+using System.Threading;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Mvc;
 using MudBlazor;
@@ -11,10 +12,8 @@ using UserManagement.Blazor.Api;
 
 namespace UserManagement.Blazor.Components.Users;
 
-public partial class UserRow
+public partial class UserRow : IDisposable
 {
-    private const string TimeoutMessage = "The server accepted the request but did not confirm it in time. Refresh the list to check.";
-
     [Parameter, EditorRequired] public Guid RowKey { get; set; }
     [Parameter, EditorRequired] public UserDto User { get; set; } = default!;
     [Parameter] public EventCallback<UserDto> OnSaved { get; set; }
@@ -23,6 +22,10 @@ public partial class UserRow
     [Inject] private IUsersApi UsersApi { get; set; } = default!;
     [Inject] private ICommandPoller Poller { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    // Cancelled when the component is disposed, so a closed circuit does not keep a poll alive for the rest
+    // of the poller's timeout.
+    private readonly CancellationTokenSource _disposal = new();
 
     private bool _expanded;
     private bool _editing;
@@ -75,7 +78,7 @@ public partial class UserRow
             var accepted = await UsersApi.UpdateUserAsync(User.Id, ToUpdateRequest(_editModel));
 
             // The API only accepted the update; the typed values are confirmed once the worker reports Completed.
-            var outcome = await Poller.WaitForOutcomeAsync(accepted.CommandId);
+            var outcome = await Poller.WaitForOutcomeAsync(accepted.CommandId, _disposal.Token);
             if (outcome.State == CommandState.Failed)
             {
                 _emailError = outcome.Error ?? "The user could not be saved.";
@@ -96,7 +99,11 @@ public partial class UserRow
         }
         catch (TimeoutException)
         {
-            _saveError = TimeoutMessage;
+            _saveError = CommandMessages.Timeout;
+        }
+        catch (OperationCanceledException)
+        {
+            // The component was disposed while waiting; there is nothing left to show.
         }
         finally
         {
@@ -114,7 +121,7 @@ public partial class UserRow
             var accepted = await UsersApi.DeleteUserAsync(User.Id);
 
             // The row goes only once the worker reports the user deleted.
-            var outcome = await Poller.WaitForOutcomeAsync(accepted.CommandId);
+            var outcome = await Poller.WaitForOutcomeAsync(accepted.CommandId, _disposal.Token);
             if (outcome.State == CommandState.Failed)
             {
                 _deleteError = outcome.Error ?? "The user could not be deleted.";
@@ -126,12 +133,23 @@ public partial class UserRow
         }
         catch (TimeoutException)
         {
-            _deleteError = TimeoutMessage;
+            _deleteError = CommandMessages.Timeout;
+        }
+        catch (OperationCanceledException)
+        {
+            // The component was disposed while waiting; there is nothing left to show.
         }
         finally
         {
             _deleting = false;
         }
+    }
+
+    public void Dispose()
+    {
+        if (!_disposal.IsCancellationRequested)
+            _disposal.Cancel();
+        _disposal.Dispose();
     }
 
     private static UpdateUserRequest ToUpdateRequest(EditUserModel model) => new()

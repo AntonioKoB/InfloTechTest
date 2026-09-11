@@ -387,6 +387,56 @@ public class UserRowTests : BunitContext
         wasDeleted.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task DisposeWhileASaveIsPending_MustCancelThePoll()
+    {
+        // Arrange
+        // A circuit that goes away mid-save must not keep the poll running for the rest of the timeout.
+        var user = SetupUser();
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>())).ReturnsAsync(accepted);
+        var pending = new TaskCompletionSource<CommandStatusResponse>();
+        CancellationToken pollToken = default;
+        _poller.Setup(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>()))
+            .Callback<Guid, CancellationToken>((_, token) => pollToken = token)
+            .Returns(pending.Task);
+        var cut = RenderExpanded(user);
+        cut.Find("#edit-button").Click();
+        await cut.InvokeAsync(() => cut.Find("#save-button").Click());
+        pollToken.CanBeCanceled.Should().BeTrue();
+
+        // Act
+        cut.Instance.Dispose();
+
+        // Assert
+        pollToken.IsCancellationRequested.Should().BeTrue();
+        pending.SetCanceled(pollToken);
+    }
+
+    [Fact]
+    public async Task DisposeWhileADeleteIsPending_MustCancelThePoll()
+    {
+        // Arrange
+        var user = SetupUser();
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.DeleteUserAsync(user.Id)).ReturnsAsync(accepted);
+        var pending = new TaskCompletionSource<CommandStatusResponse>();
+        CancellationToken pollToken = default;
+        _poller.Setup(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>()))
+            .Callback<Guid, CancellationToken>((_, token) => pollToken = token)
+            .Returns(pending.Task);
+        var cut = RenderExpanded(user);
+        await cut.InvokeAsync(() => cut.Find("#delete-button").Click());
+        pollToken.CanBeCanceled.Should().BeTrue();
+
+        // Act
+        cut.Instance.Dispose();
+
+        // Assert
+        pollToken.IsCancellationRequested.Should().BeTrue();
+        pending.SetCanceled(pollToken);
+    }
+
     private IRenderedComponent<UserRow> RenderExpanded(UserDto user, Action<ComponentParameterCollectionBuilder<UserRow>>? configure = null)
     {
         _usersApi.Setup(a => a.GetUserByIdAsync(user.Id, true)).ReturnsAsync(user);

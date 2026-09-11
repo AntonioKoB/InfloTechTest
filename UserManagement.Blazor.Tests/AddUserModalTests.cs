@@ -155,6 +155,31 @@ public class AddUserModalTests : BunitContext
     }
 
     [Fact]
+    public async Task DisposeWhilePending_MustCancelThePoll()
+    {
+        // Arrange
+        // A circuit that goes away mid-save must not keep the poll running for the rest of the timeout.
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>())).ReturnsAsync(accepted);
+        var pending = new TaskCompletionSource<CommandStatusResponse>();
+        CancellationToken pollToken = default;
+        _poller.Setup(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>()))
+            .Callback<Guid, CancellationToken>((_, token) => pollToken = token)
+            .Returns(pending.Task);
+        var cut = Render<AddUserModal>(p => p.Add(x => x.Visible, true));
+        FillForm(cut);
+        await cut.InvokeAsync(() => cut.Find("#save-button").Click());
+        pollToken.CanBeCanceled.Should().BeTrue();
+
+        // Act
+        cut.Instance.Dispose();
+
+        // Assert
+        pollToken.IsCancellationRequested.Should().BeTrue();
+        pending.SetCanceled(pollToken);
+    }
+
+    [Fact]
     public void ClickCancel_MustRaiseOnCancelledWithoutCallingApi()
     {
         // Arrange

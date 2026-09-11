@@ -35,10 +35,7 @@
                 }
                 @if (_saving)
                 {
-                    <div id="saving-indicator" class="d-flex align-center mt-2">
-                        <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" />
-                        <MudText Typo="Typo.body2">Saving…</MudText>
-                    </div>
+                    <BusyIndicator Id="saving-indicator" Text="Saving…" />
                 }
                 <MudCardActions Class="pl-0">
                     <MudButton id="save-button" ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">Save</MudButton>
@@ -104,10 +101,7 @@
             }
             @if (_deleting)
             {
-                <div id="deleting-indicator" class="d-flex align-center mt-2">
-                    <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" />
-                    <MudText Typo="Typo.body2">Deleting…</MudText>
-                </div>
+                <BusyIndicator Id="deleting-indicator" Text="Deleting…" />
             }
             <MudCardActions Class="pl-0">
                 <MudButton id="edit-button" OnClick="StartEdit" Variant="Variant.Filled" Color="Color.Primary" Disabled="_deleting">Edit</MudButton>

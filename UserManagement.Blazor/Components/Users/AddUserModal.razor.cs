@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Net;
+using System.Threading;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Mvc;
 using MudBlazor;
@@ -10,10 +11,8 @@ using UserManagement.Blazor.Api;
 
 namespace UserManagement.Blazor.Components.Users;
 
-public partial class AddUserModal
+public partial class AddUserModal : IDisposable
 {
-    private const string TimeoutMessage = "The server accepted the request but did not confirm it in time. Refresh the list to check.";
-
     [Parameter] public bool Visible { get; set; }
     [Parameter] public EventCallback OnSaved { get; set; }
     [Parameter] public EventCallback OnCancelled { get; set; }
@@ -21,6 +20,10 @@ public partial class AddUserModal
     [Inject] private IUsersApi UsersApi { get; set; } = default!;
     [Inject] private ICommandPoller Poller { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    // Cancelled when the component is disposed, so a closed circuit does not keep a poll alive for the rest
+    // of the poller's timeout.
+    private readonly CancellationTokenSource _disposal = new();
 
     private AddUserModel _model = new();
     private bool _saving;
@@ -46,7 +49,7 @@ public partial class AddUserModal
             });
 
             // The API only accepted the create; the row exists once the worker reports Completed.
-            var outcome = await Poller.WaitForOutcomeAsync(accepted.CommandId);
+            var outcome = await Poller.WaitForOutcomeAsync(accepted.CommandId, _disposal.Token);
             if (outcome.State == CommandState.Failed)
             {
                 _emailError = outcome.Error ?? "The user could not be created.";
@@ -66,7 +69,11 @@ public partial class AddUserModal
         }
         catch (TimeoutException)
         {
-            _saveError = TimeoutMessage;
+            _saveError = CommandMessages.Timeout;
+        }
+        catch (OperationCanceledException)
+        {
+            // The component was disposed while waiting; there is nothing left to show.
         }
         finally
         {
@@ -80,5 +87,12 @@ public partial class AddUserModal
         _emailError = null;
         _saveError = null;
         await OnCancelled.InvokeAsync();
+    }
+
+    public void Dispose()
+    {
+        if (!_disposal.IsCancellationRequested)
+            _disposal.Cancel();
+        _disposal.Dispose();
     }
 }
