@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,7 +25,12 @@ public class AddUserModalTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddMudServices();
         Services.AddSingleton(_usersApi.Object);
+        Services.AddSingleton(_poller.Object);
         Services.AddSingleton(_snackbar.Object);
+
+        // Unless a test says otherwise, every accepted command completes.
+        _poller.Setup(p => p.WaitForOutcomeAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) => Completed(id));
     }
 
     [Fact]
@@ -50,12 +56,13 @@ public class AddUserModalTests : BunitContext
     }
 
     [Fact]
-    public async Task ClickSave_MustCallCreateUserAsyncAndRaiseOnSavedWithSnackbar()
+    public async Task ClickSave_MustCallCreateUserAsyncWaitForTheOutcomeAndRaiseOnSavedWithSnackbar()
     {
         // Arrange
-        // The API accepts the create and returns a command id, not the user: there is no created row to hand
-        // back, so OnSaved carries nothing and the page decides how to refresh.
-        _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>())).ReturnsAsync(Accepted());
+        // The API accepts the create and returns a command id; OnSaved fires once the poller reports
+        // Completed, so the page reloads a list that already holds the new user.
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>())).ReturnsAsync(accepted);
         var wasSaved = false;
         var cut = Render<AddUserModal>(p => p
             .Add(x => x.Visible, true)
@@ -67,8 +74,109 @@ public class AddUserModalTests : BunitContext
 
         // Assert
         _usersApi.Verify(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>()), Times.Once);
+        _poller.Verify(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>()), Times.Once);
         wasSaved.Should().BeTrue();
         _snackbar.Verify(s => s.Add(It.IsAny<string>(), Severity.Success, It.IsAny<Action<SnackbarOptions>>(), It.IsAny<string>()), Times.Once);
+        cut.FindAll("#saving-indicator").Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ClickSave_WhilePending_MustShowTheSavingStateAndDisableTheButtons()
+    {
+        // Arrange
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>())).ReturnsAsync(accepted);
+        var pending = new TaskCompletionSource<CommandStatusResponse>();
+        _poller.Setup(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>())).Returns(pending.Task);
+        var cut = Render<AddUserModal>(p => p.Add(x => x.Visible, true));
+        FillForm(cut);
+
+        // Act
+        await cut.InvokeAsync(() => cut.Find("#save-button").Click());
+
+        // Assert
+        cut.Find("#saving-indicator").Should().NotBeNull();
+        cut.Find("#save-button").HasAttribute("disabled").Should().BeTrue();
+        cut.Find("#cancel-button").HasAttribute("disabled").Should().BeTrue();
+
+        pending.SetResult(Completed(accepted.CommandId));
+        cut.WaitForAssertion(() => cut.FindAll("#saving-indicator").Should().BeEmpty());
+    }
+
+    [Fact]
+    public async Task SaveWhenTheCommandFails_MustShowTheFailureInTheEmailErrorSlotAndNotRaiseOnSaved()
+    {
+        // Arrange
+        // The duplicate email is caught by the worker, not by the request: it arrives as a Failed status
+        // and lands in the same slot the form already uses for an email error.
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>())).ReturnsAsync(accepted);
+        _poller.Setup(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Failed(accepted.CommandId, "A user with email 'new@example.com' already exists."));
+        var wasSaved = false;
+        var cut = Render<AddUserModal>(p => p
+            .Add(x => x.Visible, true)
+            .Add(x => x.OnSaved, () => wasSaved = true));
+        FillForm(cut);
+
+        // Act
+        await cut.InvokeAsync(() => cut.Find("#save-button").Click());
+
+        // Assert
+        cut.Find("#email-error").TextContent.Should().Contain("already exists");
+        wasSaved.Should().BeFalse();
+        cut.FindAll("input").Should().NotBeEmpty();
+        cut.FindAll("#saving-indicator").Should().BeEmpty();
+        _snackbar.Verify(s => s.Add(It.IsAny<string>(), Severity.Success, It.IsAny<Action<SnackbarOptions>>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SaveWhenTheCommandTimesOut_MustShowTheTimeoutErrorAndNotRaiseOnSaved()
+    {
+        // Arrange
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>())).ReturnsAsync(accepted);
+        _poller.Setup(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException("Command was still pending after 30 seconds."));
+        var wasSaved = false;
+        var cut = Render<AddUserModal>(p => p
+            .Add(x => x.Visible, true)
+            .Add(x => x.OnSaved, () => wasSaved = true));
+        FillForm(cut);
+
+        // Act
+        await cut.InvokeAsync(() => cut.Find("#save-button").Click());
+
+        // Assert
+        cut.Find("#save-error").TextContent.Should().Contain("did not confirm");
+        wasSaved.Should().BeFalse();
+        cut.FindAll("#saving-indicator").Should().BeEmpty();
+        cut.Find("#save-button").HasAttribute("disabled").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DisposeWhilePending_MustCancelThePoll()
+    {
+        // Arrange
+        // A circuit that goes away mid-save must not keep the poll running for the rest of the timeout.
+        var accepted = Accepted();
+        _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>())).ReturnsAsync(accepted);
+        var pending = new TaskCompletionSource<CommandStatusResponse>();
+        CancellationToken pollToken = default;
+        _poller.Setup(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>()))
+            .Callback<Guid, CancellationToken>((_, token) => pollToken = token)
+            .Returns(pending.Task);
+        var cut = Render<AddUserModal>(p => p.Add(x => x.Visible, true));
+        FillForm(cut);
+        await cut.InvokeAsync(() => cut.Find("#save-button").Click());
+        pollToken.CanBeCanceled.Should().BeTrue();
+
+        // Act
+        cut.Instance.Dispose();
+
+        // Assert
+        pollToken.IsCancellationRequested.Should().BeTrue();
+        pending.SetCanceled(pollToken);
     }
 
     [Fact]
@@ -167,6 +275,10 @@ public class AddUserModalTests : BunitContext
 
     private static CommandAcceptedResponse Accepted() => new() { CommandId = Guid.NewGuid() };
 
+    private static CommandStatusResponse Completed(Guid commandId) => new() { CommandId = commandId, State = CommandState.Completed, UserId = 5 };
+
+    private static CommandStatusResponse Failed(Guid commandId, string error) => new() { CommandId = commandId, State = CommandState.Failed, Error = error };
+
     private static async Task<ApiException> CreateEmailConflictException()
     {
         var body = JsonSerializer.Serialize(new
@@ -184,5 +296,6 @@ public class AddUserModalTests : BunitContext
     }
 
     private readonly Mock<IUsersApi> _usersApi = new();
+    private readonly Mock<ICommandPoller> _poller = new();
     private readonly Mock<ISnackbar> _snackbar = new();
 }

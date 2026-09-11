@@ -64,6 +64,10 @@ builder.Services.AddHttpClient(nameof(ILogsApi)).AddStandardResilienceHandler();
 builder.Services.AddScoped(sp => CreateAuthenticatedClient<IUsersApi>(sp));
 builder.Services.AddScoped(sp => CreateAuthenticatedClient<ILogsApi>(sp));
 
+// Waits for an accepted command by polling its status through the users client, so it is scoped like it.
+// The worker normally finishes in milliseconds, so one or two polls; the timeout is the ceiling for a lost one.
+builder.Services.AddScoped<ICommandPoller>(sp => new CommandPoller(sp.GetRequiredService<IUsersApi>(), TimeSpan.FromMilliseconds(250), TimeSpan.FromSeconds(30)));
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

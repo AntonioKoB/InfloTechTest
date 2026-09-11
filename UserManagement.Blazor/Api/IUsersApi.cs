@@ -22,5 +22,8 @@ public interface IUsersApi
     Task<CommandAcceptedResponse> UpdateUserAsync(long id, [Body] UpdateUserRequest request);
 
     [Delete("/api/users/{id}")]
-    Task DeleteUserAsync(long id);
+    Task<CommandAcceptedResponse> DeleteUserAsync(long id);
+
+    [Get("/api/commands/{id}")]
+    Task<CommandStatusResponse> GetCommandStatusAsync(Guid id);
 }

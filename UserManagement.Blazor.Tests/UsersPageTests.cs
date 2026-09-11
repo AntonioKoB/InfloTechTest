@@ -18,6 +18,7 @@ public class UsersPageTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddMudServices();
         Services.AddSingleton(_usersApi.Object);
+        Services.AddSingleton(_poller.Object);
         Services.AddSingleton(_snackbar.Object);
     }
 
@@ -151,5 +152,6 @@ public class UsersPageTests : BunitContext
         };
 
     private readonly Mock<IUsersApi> _usersApi = new();
+    private readonly Mock<ICommandPoller> _poller = new();
     private readonly Mock<ISnackbar> _snackbar = new();
 }

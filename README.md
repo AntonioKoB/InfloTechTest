@@ -565,7 +565,7 @@ where `state` is `Pending`, `Completed` or `Failed`. `userId` is set once the co
 
 Model validation: an invalid body is a `400` immediately, as before. The caller made a mistake it can fix now, and there is nothing to queue. For the same reason `PUT` still checks that the user exists (`404`), and the password is hashed inside the request so that the command carries the hash and the clear-text password never reaches a transport. Everything that touches the database on a write happens in the worker.
 
-The Blazor UI treats a `202` as accepted: after an add it reloads the list it is showing, and an edited row shows the values that were typed.
+The Blazor UI treats the `202` as a promise, not a result: Add, Edit and Delete show a saving state and poll the status endpoint every 250 ms through a small client-side poller (`CommandPoller`, in `UserManagement.Blazor/Api`) until the command is Completed, then refresh what they show, or Failed, then show the reason in the form - the duplicate email lands where a validation error would. A command still Pending after 30 seconds is reported as a timeout rather than left spinning, because a command the API lost must never look like a slow one; a poll is also cancelled when its component is disposed, so a closed browser tab does not keep one running.
 
 ### Cost, and the limits that come with it
 
