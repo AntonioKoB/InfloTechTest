@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
@@ -11,8 +12,11 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Http.Metadata;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
@@ -209,6 +213,31 @@ public class AuthEndpointsTests
 
         // Assert
         LogRecords.Should().ContainSingle().Which.Level.Should().Be(LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task MapAuthEndpoints_LoginPost_MustDeclareTheFormContentTypesItAccepts()
+    {
+        // Arrange
+        // The login page is a Razor component route that answers POST as well. For a form post to /login,
+        // routing picks the handler over the page only because the handler declares the form content types
+        // it consumes; without that declaration every login post is an AmbiguousMatchException, and nothing
+        // above the routing layer would notice.
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddSingleton(_authApi.Object);
+        await using var app = builder.Build();
+
+        // Act
+        app.MapAuthEndpoints();
+        var login = ((IEndpointRouteBuilder)app).DataSources
+            .SelectMany(source => source.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Single(endpoint => endpoint.RoutePattern.RawText == "/login");
+
+        // Assert
+        var accepts = login.Metadata.GetMetadata<IAcceptsMetadata>();
+        accepts.Should().NotBeNull();
+        accepts!.ContentTypes.Should().Contain("application/x-www-form-urlencoded");
     }
 
     [Theory]

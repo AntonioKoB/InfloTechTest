@@ -23,13 +23,17 @@ public static partial class AuthEndpoints
 {
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapPost("/login", LoginAsync);
+        // The login page (@page "/login") answers POST as well. Routing picks this handler over it for a form
+        // post only because the handler declares the content types it consumes - a declaration [FromForm]
+        // parameters would imply, but this handler reads the form itself. Without it every POST /login is an
+        // AmbiguousMatchException.
+        endpoints.MapPost("/login", LoginAsync).Accepts<LoginRequest>("application/x-www-form-urlencoded", "multipart/form-data");
         endpoints.MapPost("/logout", LogoutAsync);
         return endpoints;
     }
 
     [RequireAntiforgeryToken]
-    public static async Task<IResult> LoginAsync([FromForm] LoginRequest request, [FromForm] string? returnUrl, IAuthApi authApi, HttpContext httpContext, ILoggerFactory loggerFactory)
+    public static async Task<IResult> LoginAsync(HttpContext httpContext, IAuthApi authApi, ILoggerFactory loggerFactory)
     {
         var logger = CreateLogger(loggerFactory);
         if (!AntiforgeryValidationPassed(httpContext))
@@ -37,6 +41,10 @@ public static partial class AuthEndpoints
             LogAntiforgeryValidationFailed(logger, "login");
             return AntiforgeryFailure();
         }
+
+        var form = await httpContext.Request.ReadFormAsync();
+        var request = new LoginRequest { Email = form["Email"].ToString(), Password = form["Password"].ToString() };
+        string? returnUrl = form["ReturnUrl"];
 
         LoginResponse login;
         try
