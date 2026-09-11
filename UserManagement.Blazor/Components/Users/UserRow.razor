@@ -29,9 +29,20 @@
                 {
                     <MudText id="email-error" Color="Color.Error" Class="mt-2">@_emailError</MudText>
                 }
+                @if (_saveError is not null)
+                {
+                    <MudText id="save-error" Color="Color.Error" Class="mt-2">@_saveError</MudText>
+                }
+                @if (_saving)
+                {
+                    <div id="saving-indicator" class="d-flex align-center mt-2">
+                        <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" />
+                        <MudText Typo="Typo.body2">Saving…</MudText>
+                    </div>
+                }
                 <MudCardActions Class="pl-0">
-                    <MudButton id="save-button" ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary">Save</MudButton>
-                    <MudButton id="cancel-button" OnClick="Cancel" Variant="Variant.Text" Class="ml-2">Cancel</MudButton>
+                    <MudButton id="save-button" ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">Save</MudButton>
+                    <MudButton id="cancel-button" OnClick="Cancel" Variant="Variant.Text" Class="ml-2" Disabled="_saving">Cancel</MudButton>
                 </MudCardActions>
             </EditForm>
         }
@@ -87,9 +98,20 @@
                 }
             </div>
 
+            @if (_deleteError is not null)
+            {
+                <MudText id="delete-error" Color="Color.Error" Class="mt-2">@_deleteError</MudText>
+            }
+            @if (_deleting)
+            {
+                <div id="deleting-indicator" class="d-flex align-center mt-2">
+                    <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" />
+                    <MudText Typo="Typo.body2">Deleting…</MudText>
+                </div>
+            }
             <MudCardActions Class="pl-0">
-                <MudButton id="edit-button" OnClick="StartEdit" Variant="Variant.Filled" Color="Color.Primary">Edit</MudButton>
-                <MudButton id="delete-button" OnClick="DeleteAsync" Variant="Variant.Filled" Color="Color.Error" Class="ml-2">Delete</MudButton>
+                <MudButton id="edit-button" OnClick="StartEdit" Variant="Variant.Filled" Color="Color.Primary" Disabled="_deleting">Edit</MudButton>
+                <MudButton id="delete-button" OnClick="DeleteAsync" Variant="Variant.Filled" Color="Color.Error" Class="ml-2" Disabled="_deleting">Delete</MudButton>
             </MudCardActions>
         }
     </MudCardContent>

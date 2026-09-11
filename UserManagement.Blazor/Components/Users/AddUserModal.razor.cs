@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Mvc;
 using MudBlazor;
 using Refit;
+using UserManagement.Api.Contracts.Commands;
 using UserManagement.Api.Contracts.Users;
 using UserManagement.Blazor.Api;
 
@@ -11,23 +12,30 @@ namespace UserManagement.Blazor.Components.Users;
 
 public partial class AddUserModal
 {
+    private const string TimeoutMessage = "The server accepted the request but did not confirm it in time. Refresh the list to check.";
+
     [Parameter] public bool Visible { get; set; }
     [Parameter] public EventCallback OnSaved { get; set; }
     [Parameter] public EventCallback OnCancelled { get; set; }
 
     [Inject] private IUsersApi UsersApi { get; set; } = default!;
+    [Inject] private ICommandPoller Poller { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
 
     private AddUserModel _model = new();
+    private bool _saving;
     private string? _emailError;
+    private string? _saveError;
 
     private async Task SaveAsync()
     {
         _emailError = null;
+        _saveError = null;
+        _saving = true;
 
         try
         {
-            await UsersApi.CreateUserAsync(new CreateUserRequest
+            var accepted = await UsersApi.CreateUserAsync(new CreateUserRequest
             {
                 Forename = _model.Forename,
                 Surname = _model.Surname,
@@ -36,6 +44,14 @@ public partial class AddUserModal
                 IsActive = _model.IsActive,
                 Password = _model.Password
             });
+
+            // The API only accepted the create; the row exists once the worker reports Completed.
+            var outcome = await Poller.WaitForOutcomeAsync(accepted.CommandId);
+            if (outcome.State == CommandState.Failed)
+            {
+                _emailError = outcome.Error ?? "The user could not be created.";
+                return;
+            }
 
             _model = new();
             Snackbar.Add("User created successfully", Severity.Success);
@@ -48,12 +64,21 @@ public partial class AddUserModal
                 ? emailErrors.FirstOrDefault()
                 : "This email is already in use.";
         }
+        catch (TimeoutException)
+        {
+            _saveError = TimeoutMessage;
+        }
+        finally
+        {
+            _saving = false;
+        }
     }
 
     private async Task Cancel()
     {
         _model = new();
         _emailError = null;
+        _saveError = null;
         await OnCancelled.InvokeAsync();
     }
 }

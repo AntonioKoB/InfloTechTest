@@ -4,7 +4,7 @@
         <MudPaper Class="add-user-panel pa-4" Elevation="4">
             <div class="d-flex justify-space-between align-center mb-2">
                 <MudText Typo="Typo.h5">Add New User</MudText>
-                <MudIconButton id="close-button" Icon="@Icons.Material.Filled.Close" OnClick="Cancel" />
+                <MudIconButton id="close-button" Icon="@Icons.Material.Filled.Close" OnClick="Cancel" Disabled="_saving" />
             </div>
             <EditForm Model="_model" OnValidSubmit="SaveAsync">
                 <DataAnnotationsValidator />
@@ -19,9 +19,20 @@
                 {
                     <MudText id="email-error" Color="Color.Error" Class="mt-2">@_emailError</MudText>
                 }
+                @if (_saveError is not null)
+                {
+                    <MudText id="save-error" Color="Color.Error" Class="mt-2">@_saveError</MudText>
+                }
+                @if (_saving)
+                {
+                    <div id="saving-indicator" class="d-flex align-center mt-2">
+                        <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" />
+                        <MudText Typo="Typo.body2">Saving…</MudText>
+                    </div>
+                }
                 <MudCardActions Class="pl-0 mt-2">
-                    <MudButton id="save-button" ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary">Save</MudButton>
-                    <MudButton id="cancel-button" OnClick="Cancel" Variant="Variant.Text" Class="ml-2">Cancel</MudButton>
+                    <MudButton id="save-button" ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">Save</MudButton>
+                    <MudButton id="cancel-button" OnClick="Cancel" Variant="Variant.Text" Class="ml-2" Disabled="_saving">Cancel</MudButton>
                 </MudCardActions>
             </EditForm>
         </MudPaper>
