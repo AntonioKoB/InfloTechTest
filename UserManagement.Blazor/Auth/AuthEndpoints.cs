@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
 using Refit;
@@ -42,6 +41,7 @@ public static partial class AuthEndpoints
             return AntiforgeryFailure();
         }
 
+        // Only after the check above: reading the form while antiforgery validation stands failed throws.
         var form = await httpContext.Request.ReadFormAsync();
         var request = new LoginRequest { Email = form["Email"].ToString(), Password = form["Password"].ToString() };
         string? returnUrl = form["ReturnUrl"];
@@ -115,9 +115,11 @@ public static partial class AuthEndpoints
         => Results.Problem(title: "The request could not be verified as coming from this site.", statusCode: StatusCodes.Status400BadRequest);
 
     // The antiforgery middleware validates the token for [RequireAntiforgeryToken] endpoints and records the
-    // outcome as a request feature, but only endpoints that bind form parameters turn a failed validation
-    // into a 400 on their own. Logout binds nothing, so both handlers check the outcome themselves: a post
-    // that was not validated (no form body, or a forged one) is rejected before it can touch the sign-in state.
+    // outcome as a request feature; it rejects nothing itself. A handler with [FromForm] parameters would have
+    // the form read during binding, and reading it after a failed validation throws - a 500, not a rejection.
+    // So neither handler binds form parameters: both check the outcome here first, and Login reads the form
+    // only after that. A post that was not validated (no form body, or a forged one) is rejected before it can
+    // touch the sign-in state.
     private static bool AntiforgeryValidationPassed(HttpContext httpContext)
         => httpContext.Features.Get<IAntiforgeryValidationFeature>() is { IsValid: true };
 
