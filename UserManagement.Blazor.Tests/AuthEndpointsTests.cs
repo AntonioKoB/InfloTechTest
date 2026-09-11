@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
@@ -11,6 +12,8 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Refit;
 using UserManagement.Api.Contracts.Auth;
 using UserManagement.Blazor.Api;
@@ -27,7 +30,7 @@ public class AuthEndpointsTests
         var response = SetupSuccessfulLogin();
 
         // Act
-        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext());
+        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext(), LoggerFactory);
 
         // Assert
         result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be("/");
@@ -52,7 +55,7 @@ public class AuthEndpointsTests
             .Returns(Task.CompletedTask);
 
         // Act
-        await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext());
+        await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext(), LoggerFactory);
 
         // Assert
         properties.Should().NotBeNull();
@@ -73,7 +76,7 @@ public class AuthEndpointsTests
         SetupSuccessfulLogin();
 
         // Act
-        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl, _authApi.Object, CreateHttpContext());
+        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl, _authApi.Object, CreateHttpContext(), LoggerFactory);
 
         // Assert
         result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be(expectedRedirect);
@@ -86,7 +89,7 @@ public class AuthEndpointsTests
         _authApi.Setup(a => a.LoginAsync(It.IsAny<LoginRequest>())).ThrowsAsync(await CreateUnauthorizedException());
 
         // Act
-        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext());
+        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext(), LoggerFactory);
 
         // Assert
         result.Should().BeOfType<RedirectHttpResult>().Which.Url.Should().Be("/login?error=1");
@@ -100,7 +103,7 @@ public class AuthEndpointsTests
         SetupSuccessfulLogin();
 
         // Act
-        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext(antiforgeryValidationPassed: false));
+        var result = await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext(antiforgeryValidationPassed: false), LoggerFactory);
 
         // Assert
         result.Should().BeAssignableTo<IStatusCodeHttpResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
@@ -115,7 +118,7 @@ public class AuthEndpointsTests
         // only the cookie principal holds.
 
         // Act
-        var result = await AuthEndpoints.LogoutAsync(CreateHttpContext(sessionToken: "jwt-token"), _authApi.Object);
+        var result = await AuthEndpoints.LogoutAsync(CreateHttpContext(sessionToken: "jwt-token"), _authApi.Object, LoggerFactory);
 
         // Assert
         _authApi.Verify(a => a.LogoutAsync("jwt-token"), Times.Once);
@@ -132,7 +135,7 @@ public class AuthEndpointsTests
         _authApi.Setup(a => a.LogoutAsync(It.IsAny<string>())).ThrowsAsync(await CreateUnauthorizedException());
 
         // Act
-        var result = await AuthEndpoints.LogoutAsync(CreateHttpContext(sessionToken: "expired-token"), _authApi.Object);
+        var result = await AuthEndpoints.LogoutAsync(CreateHttpContext(sessionToken: "expired-token"), _authApi.Object, LoggerFactory);
 
         // Assert
         _authenticationService.Verify(s => s.SignOutAsync(It.IsAny<HttpContext>(), CookieAuthenticationDefaults.AuthenticationScheme, It.IsAny<AuthenticationProperties?>()), Times.Once);
@@ -148,12 +151,56 @@ public class AuthEndpointsTests
         // token-less post would still sign the user out. The handler has to check the outcome itself.
 
         // Act
-        var result = await AuthEndpoints.LogoutAsync(CreateHttpContext(antiforgeryValidationPassed: false, sessionToken: "jwt-token"), _authApi.Object);
+        var result = await AuthEndpoints.LogoutAsync(CreateHttpContext(antiforgeryValidationPassed: false, sessionToken: "jwt-token"), _authApi.Object, LoggerFactory);
 
         // Assert
         result.Should().BeAssignableTo<IStatusCodeHttpResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         _authApi.Verify(a => a.LogoutAsync(It.IsAny<string>()), Times.Never);
         _authenticationService.Verify(s => s.SignOutAsync(It.IsAny<HttpContext>(), It.IsAny<string>(), It.IsAny<AuthenticationProperties?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LoginAsync_WhenTheApiRejectsTheCredentials_MustLogTheEmailAndStatusAtWarningWithoutThePassword()
+    {
+        // Arrange
+        _authApi.Setup(a => a.LoginAsync(It.IsAny<LoginRequest>())).ThrowsAsync(await CreateUnauthorizedException());
+
+        // Act
+        await AuthEndpoints.LoginAsync(CreateRequest(), returnUrl: null, _authApi.Object, CreateHttpContext(), LoggerFactory);
+
+        // Assert
+        var record = LogRecords.Should().ContainSingle().Which;
+        record.Level.Should().Be(LogLevel.Warning);
+        record.Message.Should().Contain("ploew@example.com").And.Contain("Unauthorized").And.NotContain("12345");
+    }
+
+    [Fact]
+    public async Task LogoutAsync_WhenTheApiNoLongerAcceptsTheToken_MustLogTheStatusAtWarning()
+    {
+        // Arrange
+        // The sign-out still succeeds locally, so this is the only trace that the API call failed.
+        _authApi.Setup(a => a.LogoutAsync(It.IsAny<string>())).ThrowsAsync(await CreateUnauthorizedException());
+
+        // Act
+        await AuthEndpoints.LogoutAsync(CreateHttpContext(sessionToken: "expired-token"), _authApi.Object, LoggerFactory);
+
+        // Assert
+        var record = LogRecords.Should().ContainSingle().Which;
+        record.Level.Should().Be(LogLevel.Warning);
+        record.Message.Should().Contain("Unauthorized").And.NotContain("expired-token");
+    }
+
+    [Fact]
+    public async Task LogoutAsync_WhenTheAntiforgeryTokenWasNotValidated_MustLogAtWarning()
+    {
+        // Arrange
+        // A rejected post is either a forged request or a broken page; both deserve a trace.
+
+        // Act
+        await AuthEndpoints.LogoutAsync(CreateHttpContext(antiforgeryValidationPassed: false, sessionToken: "jwt-token"), _authApi.Object, LoggerFactory);
+
+        // Assert
+        LogRecords.Should().ContainSingle().Which.Level.Should().Be(LogLevel.Warning);
     }
 
     [Theory]
@@ -221,6 +268,12 @@ public class AuthEndpointsTests
 
     private readonly Mock<IAuthApi> _authApi = new();
     private readonly Mock<IAuthenticationService> _authenticationService = new();
+
+    // The handlers live on a static class, so they take the factory rather than an ILogger<T>; the fake
+    // provider behind it collects whatever they log.
+    private readonly ServiceProvider _logging = new ServiceCollection().AddLogging(b => b.AddFakeLogging()).BuildServiceProvider();
+    private ILoggerFactory LoggerFactory => _logging.GetRequiredService<ILoggerFactory>();
+    private IReadOnlyList<FakeLogRecord> LogRecords => _logging.GetFakeLogCollector().GetSnapshot();
 
     // The framework's own implementation is internal; the interface is all the handlers depend on.
     private sealed class StubAntiforgeryValidationFeature(bool isValid) : IAntiforgeryValidationFeature

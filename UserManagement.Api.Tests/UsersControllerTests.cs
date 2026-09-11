@@ -5,6 +5,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.OutputCaching;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using UserManagement.Api.Caching;
 using UserManagement.Api.Contracts.Logs;
 using UserManagement.Api.Contracts.Users;
@@ -353,6 +355,70 @@ public class UsersControllerTests
     }
 
     [Fact]
+    public async Task GetById_WhenUserDoesNotExist_MustLogTheMissingIdAtInformation()
+    {
+        // Arrange
+        // A bad id is a client mistake, not a fault: worth a trace, not a Warning.
+        var controller = CreateController();
+        _userService.Setup(s => s.GetByIdAsync(It.IsAny<long>(), It.IsAny<bool>())).ReturnsAsync((User?)null);
+
+        // Act
+        await controller.GetById(999);
+
+        // Assert
+        _logger.Collector.GetSnapshot().Should().ContainSingle()
+            .Which.Should().Match<FakeLogRecord>(r => r.Level == LogLevel.Information && r.Message.Contains("999"));
+    }
+
+    [Fact]
+    public async Task Create_WhenEmailAlreadyExists_MustLogTheEmailAtWarning()
+    {
+        // Arrange
+        var controller = CreateController();
+        var request = new CreateUserRequest
+        {
+            Forename = "Brand New",
+            Surname = "User",
+            Email = "existing@example.com",
+            DateOfBirth = new DateOnly(1995, 4, 12),
+            IsActive = true
+        };
+        _userService.Setup(s => s.CreateAsync(It.IsAny<User>())).ThrowsAsync(new EmailAlreadyExistsException(request.Email));
+
+        // Act
+        await controller.Create(request);
+
+        // Assert
+        _logger.Collector.GetSnapshot().Should().ContainSingle()
+            .Which.Should().Match<FakeLogRecord>(r => r.Level == LogLevel.Warning && r.Message.Contains("existing@example.com"));
+    }
+
+    [Fact]
+    public async Task Update_WhenUserNoLongerExists_MustLogTheIdAtWarning()
+    {
+        // Arrange
+        // The row vanished between the read and the write; the caller gets a 404, and the log says why.
+        var controller = CreateController();
+        SetupUser(id: 5, forename: "Existing");
+        var request = new UpdateUserRequest
+        {
+            Forename = "Updated",
+            Surname = "User",
+            Email = "updated@example.com",
+            DateOfBirth = new DateOnly(1995, 4, 12),
+            IsActive = true
+        };
+        _userService.Setup(s => s.UpdateAsync(It.IsAny<User>())).ThrowsAsync(new UserNoLongerExistsException(5));
+
+        // Act
+        await controller.Update(5, request);
+
+        // Assert
+        _logger.Collector.GetSnapshot().Should().ContainSingle()
+            .Which.Should().Match<FakeLogRecord>(r => r.Level == LogLevel.Warning && r.Message.Contains("5"));
+    }
+
+    [Fact]
     public async Task Create_MustHashTheRequestPasswordOntoTheUserBeforePersisting()
     {
         // Arrange
@@ -640,5 +706,6 @@ public class UsersControllerTests
     private readonly Mock<IUserLogService> _userLogService = new();
     private readonly Mock<ICredentialService> _credentialService = new();
     private readonly Mock<IOutputCacheStore> _outputCache = new();
-    private UsersController CreateController() => new(_userService.Object, _userLogService.Object, _credentialService.Object, _outputCache.Object);
+    private readonly FakeLogger<UsersController> _logger = new();
+    private UsersController CreateController() => new(_userService.Object, _userLogService.Object, _credentialService.Object, _outputCache.Object, _logger);
 }

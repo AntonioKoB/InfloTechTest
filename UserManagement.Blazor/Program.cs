@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
 using Refit;
 using UserManagement.Blazor.Api;
@@ -94,7 +95,8 @@ T CreateAuthenticatedClient<T>(IServiceProvider services) where T : class
 {
     var handler = new BearerTokenHandler(
         services.GetRequiredService<AuthenticationStateProvider>(),
-        services.GetRequiredService<NavigationManager>())
+        services.GetRequiredService<NavigationManager>(),
+        services.GetRequiredService<ILogger<BearerTokenHandler>>())
     {
         InnerHandler = services.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler(typeof(T).Name)
     };

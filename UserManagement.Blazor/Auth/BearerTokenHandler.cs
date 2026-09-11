@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Threading;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Logging;
 
 namespace UserManagement.Blazor.Auth;
 
@@ -12,15 +13,17 @@ namespace UserManagement.Blazor.Auth;
 /// token is no longer accepted (typically expired); the cookie expires with it, so a full page load lands
 /// the user on the login page with clean state instead of a stale circuit.
 /// </summary>
-public class BearerTokenHandler : DelegatingHandler
+public partial class BearerTokenHandler : DelegatingHandler
 {
     private readonly AuthenticationStateProvider _authenticationStateProvider;
     private readonly NavigationManager _navigationManager;
+    private readonly ILogger<BearerTokenHandler> _logger;
 
-    public BearerTokenHandler(AuthenticationStateProvider authenticationStateProvider, NavigationManager navigationManager)
+    public BearerTokenHandler(AuthenticationStateProvider authenticationStateProvider, NavigationManager navigationManager, ILogger<BearerTokenHandler> logger)
     {
         _authenticationStateProvider = authenticationStateProvider;
         _navigationManager = navigationManager;
+        _logger = logger;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -35,9 +38,13 @@ public class BearerTokenHandler : DelegatingHandler
         var response = await base.SendAsync(request, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
+            LogTokenRejected(request.Method, request.RequestUri?.AbsolutePath);
             _navigationManager.NavigateTo("/login", forceLoad: true);
         }
 
         return response;
     }
+
+    [LoggerMessage(EventId = 2101, Level = LogLevel.Warning, Message = "The API rejected the session token for {Method} {Path}; redirecting to login")]
+    private partial void LogTokenRejected(HttpMethod method, string? path);
 }

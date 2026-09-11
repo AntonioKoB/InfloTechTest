@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
 using UserManagement.Api.Auth;
 using UserManagement.Api.Contracts.Auth;
@@ -9,15 +10,17 @@ namespace UserManagement.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/auth")]
-public class AuthController : ControllerBase
+public partial class AuthController : ControllerBase
 {
     private readonly ICredentialService _credentialService;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(ICredentialService credentialService, IJwtTokenService jwtTokenService)
+    public AuthController(ICredentialService credentialService, IJwtTokenService jwtTokenService, ILogger<AuthController> logger)
     {
         _credentialService = credentialService;
         _jwtTokenService = jwtTokenService;
+        _logger = logger;
     }
 
     [HttpPost("login")]
@@ -25,7 +28,11 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<LoginResponse>> Login(LoginRequest request)
     {
         var user = await _credentialService.AuthenticateAsync(request.Email, request.Password);
-        if (user is null) return Unauthorized();
+        if (user is null)
+        {
+            LogLoginRejected(request.Email);
+            return Unauthorized();
+        }
 
         var issued = _jwtTokenService.CreateToken(user);
 
@@ -48,4 +55,9 @@ public class AuthController : ControllerBase
         await _credentialService.SignOutAsync(userId);
         return NoContent();
     }
+
+    // The email is logged, the password never is. A run of these for one email is what a guessing attempt
+    // looks like, which is why this is a Warning rather than Information.
+    [LoggerMessage(EventId = 1101, Level = LogLevel.Warning, Message = "Login rejected for {Email}")]
+    private partial void LogLoginRejected(string email);
 }
