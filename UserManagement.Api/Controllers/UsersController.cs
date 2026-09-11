@@ -6,7 +6,6 @@ using UserManagement.Api.Contracts.Logs;
 using UserManagement.Api.Contracts.Users;
 using UserManagement.Api.Mapping;
 using UserManagement.Services.Commands;
-using UserManagement.Services.Domain.Exceptions;
 using UserManagement.Services.Domain.Interfaces;
 using UserManagement.Services.Messaging;
 
@@ -20,6 +19,8 @@ public partial class UsersController : ControllerBase
     private readonly IUserService _userService;
     private readonly IUserLogService _userLogService;
     private readonly ICredentialService _credentialService;
+    private readonly IMessageBus _messageBus;
+    private readonly ICommandStatusStore _statusStore;
     private readonly ILogger<UsersController> _logger;
 
     public UsersController(IUserService userService, IUserLogService userLogService, ICredentialService credentialService, IMessageBus messageBus, ICommandStatusStore statusStore, ILogger<UsersController> logger)
@@ -27,6 +28,8 @@ public partial class UsersController : ControllerBase
         _userService = userService;
         _userLogService = userLogService;
         _credentialService = credentialService;
+        _messageBus = messageBus;
+        _statusStore = statusStore;
         _logger = logger;
     }
 
@@ -64,22 +67,20 @@ public partial class UsersController : ControllerBase
         return Ok(logs.Select(l => l.ToDto()));
     }
 
+    // The three writes are accepted here and executed by the worker. The command is marked Pending before it
+    // is published: the worker can finish before this request returns, and a later Pending mark would
+    // overwrite its outcome.
+
     [HttpPost]
     public async Task<ActionResult<CommandAcceptedResponse>> Create(CreateUserRequest request)
     {
         var user = request.ToUser();
         _credentialService.SetPassword(user, request.Password);
+        var command = user.ToCreateCommand(Guid.NewGuid());
 
-        try
-        {
-            await _userService.CreateAsync(user);
-        }
-        catch (EmailAlreadyExistsException ex)
-        {
-            return EmailConflict(ex);
-        }
-
-        return CreatedAtAction(nameof(GetById), new { id = user.Id }, user.ToDto());
+        await _statusStore.MarkPendingAsync(command.CommandId);
+        await _messageBus.PublishAsync(command);
+        return AcceptedAtAction(nameof(CommandsController.GetStatus), "Commands", new { id = command.CommandId }, new CommandAcceptedResponse { CommandId = command.CommandId });
     }
 
     [HttpPut("{id:long}")]
@@ -93,50 +94,30 @@ public partial class UsersController : ControllerBase
         }
 
         request.ApplyTo(user);
+        string? passwordHash = null;
         if (!string.IsNullOrEmpty(request.Password))
         {
             _credentialService.SetPassword(user, request.Password);
+            passwordHash = user.PasswordHash;
         }
 
-        try
-        {
-            await _userService.UpdateAsync(user);
-        }
-        catch (EmailAlreadyExistsException ex)
-        {
-            return EmailConflict(ex);
-        }
-        catch (UserNoLongerExistsException)
-        {
-            LogUserNoLongerExists(id);
-            return NotFound();
-        }
-
-        return Ok(user.ToDto());
+        var command = user.ToUpdateCommand(Guid.NewGuid(), passwordHash);
+        await _statusStore.MarkPendingAsync(command.CommandId);
+        await _messageBus.PublishAsync(command);
+        return AcceptedAtAction(nameof(CommandsController.GetStatus), "Commands", new { id = command.CommandId }, new CommandAcceptedResponse { CommandId = command.CommandId });
     }
 
     [HttpDelete("{id:long}")]
     public async Task<ActionResult<CommandAcceptedResponse>> Delete(long id)
     {
-        await _userService.DeleteAsync(id);
-        return NoContent();
-    }
-
-    private ActionResult EmailConflict(EmailAlreadyExistsException ex)
-    {
-        LogEmailAlreadyInUse(ex.Email);
-        ModelState.AddModelError(nameof(UserDto.Email), ex.Message);
-        return ValidationProblem(ModelState);
+        var command = new DeleteUserCommand(Guid.NewGuid(), id);
+        await _statusStore.MarkPendingAsync(command.CommandId);
+        await _messageBus.PublishAsync(command);
+        return AcceptedAtAction(nameof(CommandsController.GetStatus), "Commands", new { id = command.CommandId }, new CommandAcceptedResponse { CommandId = command.CommandId });
     }
 
     // Handled errors, logged where they are handled so the reason survives the response. A missing id is a
-    // client mistake and stays at Information; the two write failures are worth a Warning.
+    // client mistake and stays at Information.
     [LoggerMessage(EventId = 1001, Level = LogLevel.Information, Message = "User {UserId} was not found")]
     private partial void LogUserNotFound(long userId);
-
-    [LoggerMessage(EventId = 1002, Level = LogLevel.Warning, Message = "Email {Email} is already in use by another user")]
-    private partial void LogEmailAlreadyInUse(string email);
-
-    [LoggerMessage(EventId = 1003, Level = LogLevel.Warning, Message = "User {UserId} no longer exists; the update was not applied")]
-    private partial void LogUserNoLongerExists(long userId);
 }
