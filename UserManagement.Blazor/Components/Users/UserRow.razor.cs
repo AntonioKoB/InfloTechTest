@@ -60,12 +60,11 @@ public partial class UserRow
 
         try
         {
-            var saved = await UsersApi.UpdateUserAsync(User.Id, ToUpdateRequest(_editModel));
+            await UsersApi.UpdateUserAsync(User.Id, ToUpdateRequest(_editModel));
 
-            User = saved;
             _editing = false;
             Snackbar.Add("User saved successfully", Severity.Success);
-            await OnSaved.InvokeAsync(saved);
+            await OnSaved.InvokeAsync(User);
         }
         catch (ApiException ex) when (ex.StatusCode == HttpStatusCode.BadRequest)
         {

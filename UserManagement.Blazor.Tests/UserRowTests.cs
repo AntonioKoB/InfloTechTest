@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
 using MudBlazor.Services;
 using Refit;
+using UserManagement.Api.Contracts.Commands;
 using UserManagement.Api.Contracts.Logs;
 using UserManagement.Api.Contracts.Users;
 using UserManagement.Blazor.Api;
@@ -128,14 +129,15 @@ public class UserRowTests : BunitContext
     }
 
     [Fact]
-    public async Task EditMode_ClickSave_MustCallUpdateUserAsyncAndRaiseOnSaved()
+    public async Task EditMode_ClickSave_MustCallUpdateUserAsyncAndRaiseOnSavedWithTheEditedValues()
     {
         // Arrange
+        // The API accepts the update and returns a command id, not the saved user. The row shows what was
+        // typed, so the values the user just entered are what OnSaved carries and what the row renders.
         var user = SetupUser();
-        var updated = new UserDto { Id = user.Id, Forename = user.Forename, Surname = user.Surname, Email = user.Email, IsActive = user.IsActive, DateOfBirth = user.DateOfBirth };
         _usersApi.Setup(a => a.GetUserByIdAsync(user.Id, true)).ReturnsAsync(user);
         _usersApi.Setup(a => a.GetUserLogsAsync(user.Id)).ReturnsAsync([]);
-        _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>())).ReturnsAsync(updated);
+        _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>())).ReturnsAsync(Accepted());
         UserDto? savedArg = null;
         var cut = Render<UserRow>(p => p
             .Add(x => x.RowKey, Guid.NewGuid())
@@ -143,6 +145,7 @@ public class UserRowTests : BunitContext
             .Add(x => x.OnSaved, saved => savedArg = saved));
         cut.Find("#row-header").Click();
         cut.Find("#edit-button").Click();
+        cut.Find("#input-forename").Change("Renamed");
 
         // Act
         await cut.InvokeAsync(() => cut.Find("#save-button").Click());
@@ -151,6 +154,9 @@ public class UserRowTests : BunitContext
         _usersApi.Verify(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>()), Times.Once);
         savedArg.Should().NotBeNull();
         savedArg!.Id.Should().Be(user.Id);
+        savedArg.Forename.Should().Be("Renamed");
+        savedArg.Surname.Should().Be(user.Surname);
+        cut.Markup.Should().Contain("Renamed");
     }
 
     [Fact]
@@ -165,7 +171,7 @@ public class UserRowTests : BunitContext
         UpdateUserRequest? sentRequest = null;
         _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>()))
             .Callback<long, UpdateUserRequest>((_, r) => sentRequest = r)
-            .ReturnsAsync(user);
+            .ReturnsAsync(Accepted());
         var cut = Render<UserRow>(p => p
             .Add(x => x.RowKey, Guid.NewGuid())
             .Add(x => x.User, user));
@@ -193,7 +199,7 @@ public class UserRowTests : BunitContext
         UpdateUserRequest? sentRequest = null;
         _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>()))
             .Callback<long, UpdateUserRequest>((_, r) => sentRequest = r)
-            .ReturnsAsync(user);
+            .ReturnsAsync(Accepted());
         var cut = Render<UserRow>(p => p
             .Add(x => x.RowKey, Guid.NewGuid())
             .Add(x => x.User, user));
@@ -216,7 +222,7 @@ public class UserRowTests : BunitContext
         var user = SetupUser();
         _usersApi.Setup(a => a.GetUserByIdAsync(user.Id, true)).ReturnsAsync(user);
         _usersApi.Setup(a => a.GetUserLogsAsync(user.Id)).ReturnsAsync([]);
-        _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>())).ReturnsAsync(user);
+        _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>())).ReturnsAsync(Accepted());
         var cut = Render<UserRow>(p => p
             .Add(x => x.RowKey, Guid.NewGuid())
             .Add(x => x.User, user));
@@ -278,6 +284,8 @@ public class UserRowTests : BunitContext
         wasDeleted.Should().BeTrue();
         _snackbar.Verify(s => s.Add(It.IsAny<string>(), Severity.Success, It.IsAny<Action<SnackbarOptions>>(), It.IsAny<string>()), Times.Once);
     }
+
+    private static CommandAcceptedResponse Accepted() => new() { CommandId = Guid.NewGuid() };
 
     private static async Task<ApiException> CreateEmailConflictException()
     {

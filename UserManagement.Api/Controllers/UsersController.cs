@@ -1,12 +1,14 @@
-using System.Threading;
 using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.Extensions.Logging;
 using UserManagement.Api.Caching;
+using UserManagement.Api.Contracts.Commands;
 using UserManagement.Api.Contracts.Logs;
 using UserManagement.Api.Contracts.Users;
 using UserManagement.Api.Mapping;
+using UserManagement.Services.Commands;
 using UserManagement.Services.Domain.Exceptions;
 using UserManagement.Services.Domain.Interfaces;
+using UserManagement.Services.Messaging;
 
 namespace UserManagement.Api.Controllers;
 
@@ -18,15 +20,13 @@ public partial class UsersController : ControllerBase
     private readonly IUserService _userService;
     private readonly IUserLogService _userLogService;
     private readonly ICredentialService _credentialService;
-    private readonly IOutputCacheStore _outputCache;
     private readonly ILogger<UsersController> _logger;
 
-    public UsersController(IUserService userService, IUserLogService userLogService, ICredentialService credentialService, IOutputCacheStore outputCache, ILogger<UsersController> logger)
+    public UsersController(IUserService userService, IUserLogService userLogService, ICredentialService credentialService, IMessageBus messageBus, ICommandStatusStore statusStore, ILogger<UsersController> logger)
     {
         _userService = userService;
         _userLogService = userLogService;
         _credentialService = credentialService;
-        _outputCache = outputCache;
         _logger = logger;
     }
 
@@ -65,7 +65,7 @@ public partial class UsersController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<UserDto>> Create(CreateUserRequest request)
+    public async Task<ActionResult<CommandAcceptedResponse>> Create(CreateUserRequest request)
     {
         var user = request.ToUser();
         _credentialService.SetPassword(user, request.Password);
@@ -79,12 +79,11 @@ public partial class UsersController : ControllerBase
             return EmailConflict(ex);
         }
 
-        await EvictUsersListAsync();
         return CreatedAtAction(nameof(GetById), new { id = user.Id }, user.ToDto());
     }
 
     [HttpPut("{id:long}")]
-    public async Task<ActionResult<UserDto>> Update(long id, UpdateUserRequest request)
+    public async Task<ActionResult<CommandAcceptedResponse>> Update(long id, UpdateUserRequest request)
     {
         var user = await _userService.GetByIdAsync(id);
         if (user is null)
@@ -113,15 +112,13 @@ public partial class UsersController : ControllerBase
             return NotFound();
         }
 
-        await EvictUsersListAsync();
         return Ok(user.ToDto());
     }
 
     [HttpDelete("{id:long}")]
-    public async Task<IActionResult> Delete(long id)
+    public async Task<ActionResult<CommandAcceptedResponse>> Delete(long id)
     {
         await _userService.DeleteAsync(id);
-        await EvictUsersListAsync();
         return NoContent();
     }
 
@@ -131,12 +128,6 @@ public partial class UsersController : ControllerBase
         ModelState.AddModelError(nameof(UserDto.Email), ex.Message);
         return ValidationProblem(ModelState);
     }
-
-    // Called after a write has succeeded. The cached list must go even if the caller has disconnected by now,
-    // so this deliberately ignores the request's cancellation token. The single-user cache is invalidated by
-    // the service layer, where that read is cached.
-    private Task EvictUsersListAsync()
-        => _outputCache.EvictByTagAsync(OutputCachingExtensions.UsersTag, CancellationToken.None).AsTask();
 
     // Handled errors, logged where they are handled so the reason survives the response. A missing id is a
     // client mistake and stays at Information; the two write failures are worth a Warning.

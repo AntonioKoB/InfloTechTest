@@ -25,9 +25,8 @@ public partial class UsersPage
 
     private void OpenAddModal() => _showAddModal = true;
 
-    private void HandleUserAdded(UserDto created)
+    private void HandleUserAdded()
     {
-        _rows.Add(new RowState(Guid.NewGuid(), created));
         _showAddModal = false;
     }
 

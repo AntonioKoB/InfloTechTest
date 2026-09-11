@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
 using MudBlazor.Services;
 using Refit;
+using UserManagement.Api.Contracts.Commands;
 using UserManagement.Api.Contracts.Users;
 using UserManagement.Blazor.Api;
 using UserManagement.Blazor.Components.Users;
@@ -52,12 +53,13 @@ public class AddUserModalTests : BunitContext
     public async Task ClickSave_MustCallCreateUserAsyncAndRaiseOnSavedWithSnackbar()
     {
         // Arrange
-        var created = new UserDto { Id = 5, Forename = "New", Surname = "User", Email = "new@example.com", IsActive = true, DateOfBirth = new DateOnly(2000, 1, 1) };
-        _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>())).ReturnsAsync(created);
-        UserDto? savedArg = null;
+        // The API accepts the create and returns a command id, not the user: there is no created row to hand
+        // back, so OnSaved carries nothing and the page decides how to refresh.
+        _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>())).ReturnsAsync(Accepted());
+        var wasSaved = false;
         var cut = Render<AddUserModal>(p => p
             .Add(x => x.Visible, true)
-            .Add(x => x.OnSaved, saved => savedArg = saved));
+            .Add(x => x.OnSaved, () => wasSaved = true));
         FillForm(cut);
 
         // Act
@@ -65,8 +67,7 @@ public class AddUserModalTests : BunitContext
 
         // Assert
         _usersApi.Verify(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>()), Times.Once);
-        savedArg.Should().NotBeNull();
-        savedArg!.Id.Should().Be(5);
+        wasSaved.Should().BeTrue();
         _snackbar.Verify(s => s.Add(It.IsAny<string>(), Severity.Success, It.IsAny<Action<SnackbarOptions>>(), It.IsAny<string>()), Times.Once);
     }
 
@@ -96,7 +97,7 @@ public class AddUserModalTests : BunitContext
         var wasSaved = false;
         var cut = Render<AddUserModal>(p => p
             .Add(x => x.Visible, true)
-            .Add(x => x.OnSaved, _ => wasSaved = true));
+            .Add(x => x.OnSaved, () => wasSaved = true));
         FillForm(cut);
 
         // Act
@@ -124,7 +125,7 @@ public class AddUserModalTests : BunitContext
         CreateUserRequest? sentRequest = null;
         _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>()))
             .Callback<CreateUserRequest>(r => sentRequest = r)
-            .ReturnsAsync(new UserDto { Id = 5 });
+            .ReturnsAsync(Accepted());
         var cut = Render<AddUserModal>(p => p.Add(x => x.Visible, true));
         FillForm(cut, password: "12345");
 
@@ -163,6 +164,8 @@ public class AddUserModalTests : BunitContext
             cut.Find("#input-password").Change(password);
         }
     }
+
+    private static CommandAcceptedResponse Accepted() => new() { CommandId = Guid.NewGuid() };
 
     private static async Task<ApiException> CreateEmailConflictException()
     {

@@ -7,13 +7,14 @@ using UserManagement.Data;
 using UserManagement.Models;
 using UserManagement.Services.Domain;
 using UserManagement.Services.Domain.Interfaces;
+using UserManagement.Services.Messaging;
 
 namespace UserManagement.Services.Domain.Implementations;
 
 public class UserLogService : IUserLogService
 {
     private readonly IDataContext _dataAccess;
-    public UserLogService(IDataContext dataAccess) => _dataAccess = dataAccess;
+    public UserLogService(IDataContext dataAccess, IMessageBus messageBus) => _dataAccess = dataAccess;
 
     public Task RecordAsync(long userId, UserLogAction action, User? before, User? after)
         => _dataAccess.CreateAsync(new UserLog

@@ -4,16 +4,16 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
-using UserManagement.Api.Caching;
+using UserManagement.Api.Contracts.Commands;
 using UserManagement.Api.Contracts.Logs;
 using UserManagement.Api.Contracts.Users;
 using UserManagement.Api.Controllers;
 using UserManagement.Models;
-using UserManagement.Services.Domain.Exceptions;
+using UserManagement.Services.Commands;
 using UserManagement.Services.Domain.Interfaces;
+using UserManagement.Services.Messaging;
 
 namespace UserManagement.Api.Tests;
 
@@ -138,6 +138,22 @@ public class UsersControllerTests
     }
 
     [Fact]
+    public async Task GetById_WhenUserDoesNotExist_MustLogTheMissingIdAtInformation()
+    {
+        // Arrange
+        // A bad id is a client mistake, not a fault: worth a trace, not a Warning.
+        var controller = CreateController();
+        _userService.Setup(s => s.GetByIdAsync(It.IsAny<long>(), It.IsAny<bool>())).ReturnsAsync((User?)null);
+
+        // Act
+        await controller.GetById(999);
+
+        // Assert
+        _logger.Collector.GetSnapshot().Should().ContainSingle()
+            .Which.Should().Match<FakeLogRecord>(r => r.Level == LogLevel.Information && r.Message.Contains("999"));
+    }
+
+    [Fact]
     public async Task GetUserLogs_MustReturnGetForUserAsyncItemsMappedToDto()
     {
         // Arrange
@@ -158,462 +174,260 @@ public class UsersControllerTests
             .Which.Should().ContainSingle(l => l.Id == 1 && l.UserId == user.Id);
     }
 
+    // The API accepts a write and returns 202; the worker executes it. Each mutation therefore publishes a
+    // command, marks it Pending, and points the caller at the status endpoint - and does not touch the
+    // service's write methods itself.
+
     [Fact]
-    public async Task Create_WhenValid_MustCallCreateAsyncWithMappedUser()
+    public async Task Create_WhenValid_MustReturnAcceptedAtTheCommandStatusEndpointWithTheCommandId()
     {
         // Arrange
         var controller = CreateController();
-        var request = new CreateUserRequest
-        {
-            Forename = "Brand New",
-            Surname = "User",
-            Email = "brandnewuser@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true
-        };
 
         // Act
-        await controller.Create(request);
+        var result = await controller.Create(NewCreateRequest());
 
         // Assert
-        _userService.Verify(s => s.CreateAsync(It.Is<User>(u =>
-            u.Forename == request.Forename &&
-            u.Surname == request.Surname &&
-            u.Email == request.Email &&
-            u.DateOfBirth == request.DateOfBirth &&
-            u.IsActive == request.IsActive)), Times.Once);
+        AssertAcceptedAtCommandStatus(result);
     }
 
     [Fact]
-    public async Task Create_WhenValid_MustReturnCreatedAtActionWithUserDto()
+    public async Task Create_WhenValid_MustPublishACreateUserCommandCarryingTheRequestFields()
     {
         // Arrange
         var controller = CreateController();
-        var request = new CreateUserRequest
-        {
-            Forename = "Brand New",
-            Surname = "User",
-            Email = "brandnewuser@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true
-        };
+        var request = NewCreateRequest();
+        var published = CapturePublishedCommands();
 
         // Act
         var result = await controller.Create(request);
 
         // Assert
-        result.Result.Should().BeOfType<CreatedAtActionResult>()
-            .Which.Value.Should().BeAssignableTo<UserDto>()
-            .Which.Email.Should().Be(request.Email);
+        var command = published.Should().ContainSingle().Which.Should().BeOfType<CreateUserCommand>().Subject;
+        command.CommandId.Should().Be(AcceptedCommandId(result));
+        command.Forename.Should().Be(request.Forename);
+        command.Surname.Should().Be(request.Surname);
+        command.Email.Should().Be(request.Email);
+        command.DateOfBirth.Should().Be(request.DateOfBirth);
+        command.IsActive.Should().Be(request.IsActive);
     }
 
     [Fact]
-    public async Task Create_WhenEmailAlreadyExists_MustReturnValidationProblemWithEmailModelError()
+    public async Task Create_WhenValid_MustPublishThePasswordHashNeverTheClearText()
     {
         // Arrange
+        // The clear-text password exists only inside this request. The command that travels on the bus
+        // carries the hash the credential service produced, so no transport ever sees the password.
         var controller = CreateController();
-        var request = new CreateUserRequest
-        {
-            Forename = "Brand New",
-            Surname = "User",
-            Email = "existing@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true
-        };
-        _userService.Setup(s => s.CreateAsync(It.IsAny<User>())).ThrowsAsync(new EmailAlreadyExistsException(request.Email));
-
-        // Act
-        var result = await controller.Create(request);
-
-        // Assert
-        result.Result.Should().BeAssignableTo<ObjectResult>()
-            .Which.Value.Should().BeOfType<ValidationProblemDetails>()
-            .Which.Errors.Should().ContainKey(nameof(CreateUserRequest.Email));
-    }
-
-    [Fact]
-    public async Task Update_WhenUserExists_MustCallUpdateAsyncWithMergedUser()
-    {
-        // Arrange
-        var controller = CreateController();
-        SetupUser(id: 5, forename: "Existing");
-        var request = new UpdateUserRequest
-        {
-            Forename = "Updated",
-            Surname = "User",
-            Email = "updated@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true
-        };
-
-        // Act
-        await controller.Update(5, request);
-
-        // Assert
-        _userService.Verify(s => s.UpdateAsync(It.Is<User>(u =>
-            u.Id == 5 &&
-            u.Forename == request.Forename &&
-            u.Surname == request.Surname &&
-            u.Email == request.Email &&
-            u.DateOfBirth == request.DateOfBirth &&
-            u.IsActive == request.IsActive)), Times.Once);
-    }
-
-    [Fact]
-    public async Task Update_WhenUserExists_MustReturnOkWithUpdatedUserDto()
-    {
-        // Arrange
-        var controller = CreateController();
-        SetupUser(id: 5, forename: "Existing");
-        var request = new UpdateUserRequest
-        {
-            Forename = "Updated",
-            Surname = "User",
-            Email = "updated@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true
-        };
-
-        // Act
-        var result = await controller.Update(5, request);
-
-        // Assert
-        result.Result.Should().BeOfType<OkObjectResult>()
-            .Which.Value.Should().BeAssignableTo<UserDto>()
-            .Which.Forename.Should().Be("Updated");
-    }
-
-    [Fact]
-    public async Task Update_WhenUserDoesNotExist_MustReturnNotFound()
-    {
-        // Arrange
-        var controller = CreateController();
-        _userService.Setup(s => s.GetByIdAsync(999, It.IsAny<bool>())).ReturnsAsync((User?)null);
-        var request = new UpdateUserRequest
-        {
-            Forename = "X",
-            Surname = "Y",
-            Email = "x@example.com",
-            DateOfBirth = new DateOnly(1990, 1, 1),
-            IsActive = true
-        };
-
-        // Act
-        var result = await controller.Update(999, request);
-
-        // Assert
-        result.Result.Should().BeOfType<NotFoundResult>();
-        _userService.Verify(s => s.UpdateAsync(It.IsAny<User>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task Update_WhenEmailAlreadyExistsOnAnotherUser_MustReturnValidationProblemWithEmailModelError()
-    {
-        // Arrange
-        var controller = CreateController();
-        SetupUser(id: 5, forename: "Existing");
-        var request = new UpdateUserRequest
-        {
-            Forename = "Updated",
-            Surname = "User",
-            Email = "taken@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true
-        };
-        _userService.Setup(s => s.UpdateAsync(It.IsAny<User>())).ThrowsAsync(new EmailAlreadyExistsException(request.Email));
-
-        // Act
-        var result = await controller.Update(5, request);
-
-        // Assert
-        result.Result.Should().BeAssignableTo<ObjectResult>()
-            .Which.Value.Should().BeOfType<ValidationProblemDetails>()
-            .Which.Errors.Should().ContainKey(nameof(UpdateUserRequest.Email));
-    }
-
-    [Fact]
-    public async Task Update_WhenUserNoLongerExists_MustReturnNotFound()
-    {
-        // Arrange
-        var controller = CreateController();
-        SetupUser(id: 5, forename: "Existing");
-        var request = new UpdateUserRequest
-        {
-            Forename = "Updated",
-            Surname = "User",
-            Email = "updated@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true
-        };
-        _userService.Setup(s => s.UpdateAsync(It.IsAny<User>())).ThrowsAsync(new UserNoLongerExistsException(5));
-
-        // Act
-        var result = await controller.Update(5, request);
-
-        // Assert
-        result.Result.Should().BeOfType<NotFoundResult>();
-    }
-
-    [Fact]
-    public async Task GetById_WhenUserDoesNotExist_MustLogTheMissingIdAtInformation()
-    {
-        // Arrange
-        // A bad id is a client mistake, not a fault: worth a trace, not a Warning.
-        var controller = CreateController();
-        _userService.Setup(s => s.GetByIdAsync(It.IsAny<long>(), It.IsAny<bool>())).ReturnsAsync((User?)null);
-
-        // Act
-        await controller.GetById(999);
-
-        // Assert
-        _logger.Collector.GetSnapshot().Should().ContainSingle()
-            .Which.Should().Match<FakeLogRecord>(r => r.Level == LogLevel.Information && r.Message.Contains("999"));
-    }
-
-    [Fact]
-    public async Task Create_WhenEmailAlreadyExists_MustLogTheEmailAtWarning()
-    {
-        // Arrange
-        var controller = CreateController();
-        var request = new CreateUserRequest
-        {
-            Forename = "Brand New",
-            Surname = "User",
-            Email = "existing@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true
-        };
-        _userService.Setup(s => s.CreateAsync(It.IsAny<User>())).ThrowsAsync(new EmailAlreadyExistsException(request.Email));
-
-        // Act
-        await controller.Create(request);
-
-        // Assert
-        _logger.Collector.GetSnapshot().Should().ContainSingle()
-            .Which.Should().Match<FakeLogRecord>(r => r.Level == LogLevel.Warning && r.Message.Contains("existing@example.com"));
-    }
-
-    [Fact]
-    public async Task Update_WhenUserNoLongerExists_MustLogTheIdAtWarning()
-    {
-        // Arrange
-        // The row vanished between the read and the write; the caller gets a 404, and the log says why.
-        var controller = CreateController();
-        SetupUser(id: 5, forename: "Existing");
-        var request = new UpdateUserRequest
-        {
-            Forename = "Updated",
-            Surname = "User",
-            Email = "updated@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true
-        };
-        _userService.Setup(s => s.UpdateAsync(It.IsAny<User>())).ThrowsAsync(new UserNoLongerExistsException(5));
-
-        // Act
-        await controller.Update(5, request);
-
-        // Assert
-        _logger.Collector.GetSnapshot().Should().ContainSingle()
-            .Which.Should().Match<FakeLogRecord>(r => r.Level == LogLevel.Warning && r.Message.Contains("5"));
-    }
-
-    [Fact]
-    public async Task Create_MustHashTheRequestPasswordOntoTheUserBeforePersisting()
-    {
-        // Arrange
-        // The API is the only place the clear-text password exists; it must be turned into a hash on the
-        // User (via ICredentialService) before the user is handed to the service to be saved, so the
-        // persisted row never carries the clear-text value.
-        var controller = CreateController();
-        var request = new CreateUserRequest
-        {
-            Forename = "Brand New",
-            Surname = "User",
-            Email = "brandnewuser@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true,
-            Password = "12345"
-        };
-        var passwordWasSetBeforePersisting = false;
-        _userService
-            .Setup(s => s.CreateAsync(It.IsAny<User>()))
-            .Callback(() => passwordWasSetBeforePersisting = _credentialService.Invocations.Any(i => i.Method.Name == nameof(ICredentialService.SetPassword)))
-            .Returns(Task.CompletedTask);
+        var request = NewCreateRequest(password: "12345");
+        _credentialService.Setup(c => c.SetPassword(It.IsAny<User>(), "12345")).Callback<User, string>((u, _) => u.PasswordHash = "hashed-12345");
+        var published = CapturePublishedCommands();
 
         // Act
         await controller.Create(request);
 
         // Assert
         _credentialService.Verify(c => c.SetPassword(It.Is<User>(u => u.Email == request.Email), "12345"), Times.Once);
-        passwordWasSetBeforePersisting.Should().BeTrue();
+        published.Should().ContainSingle().Which.Should().BeOfType<CreateUserCommand>()
+            .Which.PasswordHash.Should().Be("hashed-12345");
     }
 
     [Fact]
-    public async Task Update_WhenPasswordSupplied_MustHashItOntoTheExistingUser()
+    public async Task Create_WhenValid_MustMarkTheCommandPendingBeforePublishingIt()
+    {
+        // Arrange
+        var controller = CreateController();
+        var marked = CaptureMarkedPending();
+
+        // Act
+        var result = await controller.Create(NewCreateRequest());
+
+        // Assert
+        marked.CommandId.Should().Be(AcceptedCommandId(result));
+        marked.BeforePublish.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Create_WhenValid_MustNotCreateTheUserItself()
+    {
+        // Arrange
+        var controller = CreateController();
+
+        // Act
+        await controller.Create(NewCreateRequest());
+
+        // Assert
+        _userService.Verify(s => s.CreateAsync(It.IsAny<User>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_WhenUserExists_MustReturnAcceptedAtTheCommandStatusEndpointWithTheCommandId()
     {
         // Arrange
         var controller = CreateController();
         SetupUser(id: 5, forename: "Existing");
-        var request = new UpdateUserRequest
-        {
-            Forename = "Updated",
-            Surname = "User",
-            Email = "updated@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true,
-            Password = "new-secret"
-        };
 
         // Act
-        await controller.Update(5, request);
+        var result = await controller.Update(5, NewUpdateRequest());
+
+        // Assert
+        AssertAcceptedAtCommandStatus(result);
+    }
+
+    [Fact]
+    public async Task Update_WhenUserExists_MustPublishAnUpdateUserCommandWithTheIdAndTheRequestFields()
+    {
+        // Arrange
+        var controller = CreateController();
+        SetupUser(id: 5, forename: "Existing");
+        var request = NewUpdateRequest();
+        var published = CapturePublishedCommands();
+
+        // Act
+        var result = await controller.Update(5, request);
+
+        // Assert
+        var command = published.Should().ContainSingle().Which.Should().BeOfType<UpdateUserCommand>().Subject;
+        command.CommandId.Should().Be(AcceptedCommandId(result));
+        command.UserId.Should().Be(5);
+        command.Forename.Should().Be(request.Forename);
+        command.Surname.Should().Be(request.Surname);
+        command.Email.Should().Be(request.Email);
+        command.DateOfBirth.Should().Be(request.DateOfBirth);
+        command.IsActive.Should().Be(request.IsActive);
+    }
+
+    [Fact]
+    public async Task Update_WhenPasswordSupplied_MustPublishTheNewHash()
+    {
+        // Arrange
+        var controller = CreateController();
+        SetupUser(id: 5, forename: "Existing", passwordHash: "old-hash");
+        _credentialService.Setup(c => c.SetPassword(It.IsAny<User>(), "new-secret")).Callback<User, string>((u, _) => u.PasswordHash = "hashed-new-secret");
+        var published = CapturePublishedCommands();
+
+        // Act
+        await controller.Update(5, NewUpdateRequest(password: "new-secret"));
 
         // Assert
         _credentialService.Verify(c => c.SetPassword(It.Is<User>(u => u.Id == 5), "new-secret"), Times.Once);
-        _userService.Verify(s => s.UpdateAsync(It.Is<User>(u => u.Id == 5)), Times.Once);
+        published.Should().ContainSingle().Which.Should().BeOfType<UpdateUserCommand>()
+            .Which.PasswordHash.Should().Be("hashed-new-secret");
     }
 
     [Fact]
-    public async Task Update_WhenPasswordNotSupplied_MustLeaveTheExistingPasswordUntouched()
+    public async Task Update_WhenPasswordNotSupplied_MustPublishNoHashAndLeaveTheCredentialServiceAlone()
     {
         // Arrange
         // Editing a user's details must not silently reset their password - a blank password on Update
-        // means "keep the current one", so the credential service must not be involved at all.
+        // means "keep the current one", which the command expresses as a null hash.
         var controller = CreateController();
-        SetupUser(id: 5, forename: "Existing");
-        var request = new UpdateUserRequest
-        {
-            Forename = "Updated",
-            Surname = "User",
-            Email = "updated@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true,
-            Password = null
-        };
+        SetupUser(id: 5, forename: "Existing", passwordHash: "old-hash");
+        var published = CapturePublishedCommands();
 
         // Act
-        await controller.Update(5, request);
+        await controller.Update(5, NewUpdateRequest(password: null));
 
         // Assert
         _credentialService.Verify(c => c.SetPassword(It.IsAny<User>(), It.IsAny<string>()), Times.Never);
-        _userService.Verify(s => s.UpdateAsync(It.Is<User>(u => u.Id == 5)), Times.Once);
+        published.Should().ContainSingle().Which.Should().BeOfType<UpdateUserCommand>()
+            .Which.PasswordHash.Should().BeNull();
     }
 
     [Fact]
-    public async Task Delete_MustCallDeleteAsyncWithId()
+    public async Task Update_WhenUserExists_MustMarkTheCommandPendingBeforePublishingIt()
     {
         // Arrange
         var controller = CreateController();
+        SetupUser(id: 5, forename: "Existing");
+        var marked = CaptureMarkedPending();
 
         // Act
-        await controller.Delete(5);
+        var result = await controller.Update(5, NewUpdateRequest());
 
         // Assert
-        _userService.Verify(s => s.DeleteAsync(5), Times.Once);
+        marked.CommandId.Should().Be(AcceptedCommandId(result));
+        marked.BeforePublish.Should().BeTrue();
     }
 
     [Fact]
-    public async Task Delete_MustReturnNoContentRegardlessOfWhetherUserExisted()
+    public async Task Update_WhenUserExists_MustNotUpdateTheUserItself()
     {
         // Arrange
         var controller = CreateController();
+        SetupUser(id: 5, forename: "Existing");
 
         // Act
-        var result = await controller.Delete(999);
+        await controller.Update(5, NewUpdateRequest());
 
         // Assert
-        result.Should().BeOfType<NoContentResult>();
+        _userService.Verify(s => s.UpdateAsync(It.IsAny<User>()), Times.Never);
     }
 
     [Fact]
-    public async Task Create_WhenUserIsCreated_MustEvictTheUsersListCache()
+    public async Task Update_WhenUserDoesNotExist_MustReturnNotFoundAndPublishNothing()
     {
         // Arrange
-        var controller = CreateController();
-        var request = new CreateUserRequest
-        {
-            Forename = "Brand New",
-            Surname = "User",
-            Email = "brandnewuser@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true
-        };
-
-        // Act
-        await controller.Create(request);
-
-        // Assert
-        _outputCache.Verify(c => c.EvictByTagAsync(OutputCachingExtensions.UsersTag, It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task Create_WhenEmailAlreadyExists_MustNotEvictTheUsersListCache()
-    {
-        // Arrange
-        var controller = CreateController();
-        var request = new CreateUserRequest
-        {
-            Forename = "Brand New",
-            Surname = "User",
-            Email = "existing@example.com",
-            DateOfBirth = new DateOnly(1995, 4, 12),
-            IsActive = true
-        };
-        _userService.Setup(s => s.CreateAsync(It.IsAny<User>())).ThrowsAsync(new EmailAlreadyExistsException(request.Email));
-
-        // Act
-        await controller.Create(request);
-
-        // Assert
-        _outputCache.Verify(c => c.EvictByTagAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task Update_WhenUserIsUpdated_MustEvictTheUsersListCache()
-    {
-        // Arrange
-        var controller = CreateController();
-        var user = SetupUser();
-        var request = new UpdateUserRequest
-        {
-            Forename = "Updated",
-            Surname = user.Surname,
-            Email = user.Email,
-            DateOfBirth = user.DateOfBirth,
-            IsActive = user.IsActive
-        };
-
-        // Act
-        await controller.Update(user.Id, request);
-
-        // Assert
-        _outputCache.Verify(c => c.EvictByTagAsync(OutputCachingExtensions.UsersTag, It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task Update_WhenUserDoesNotExist_MustNotEvictTheUsersListCache()
-    {
-        // Arrange
+        // Checking the id is validation of the request, not execution of it: an unknown user is a 404 now,
+        // not a Failed status later.
         var controller = CreateController();
         _userService.Setup(s => s.GetByIdAsync(999, It.IsAny<bool>())).ReturnsAsync((User?)null);
-        var request = new UpdateUserRequest
-        {
-            Forename = "X",
-            Surname = "Y",
-            Email = "x@example.com",
-            DateOfBirth = new DateOnly(1990, 1, 1),
-            IsActive = true
-        };
 
         // Act
-        await controller.Update(999, request);
+        var result = await controller.Update(999, NewUpdateRequest());
 
         // Assert
-        _outputCache.Verify(c => c.EvictByTagAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        result.Result.Should().BeOfType<NotFoundResult>();
+        _messageBus.Verify(b => b.PublishAsync(It.IsAny<ICommand>(), It.IsAny<CancellationToken>()), Times.Never);
+        _statusStore.Verify(s => s.MarkPendingAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     [Fact]
-    public async Task Delete_WhenCalled_MustEvictTheUsersListCache()
+    public async Task Delete_MustReturnAcceptedAtTheCommandStatusEndpointWithTheCommandId()
+    {
+        // Arrange
+        var controller = CreateController();
+
+        // Act
+        var result = await controller.Delete(5);
+
+        // Assert
+        AssertAcceptedAtCommandStatus(result);
+    }
+
+    [Fact]
+    public async Task Delete_MustPublishADeleteUserCommandWithTheId()
+    {
+        // Arrange
+        var controller = CreateController();
+        var published = CapturePublishedCommands();
+
+        // Act
+        var result = await controller.Delete(5);
+
+        // Assert
+        var command = published.Should().ContainSingle().Which.Should().BeOfType<DeleteUserCommand>().Subject;
+        command.CommandId.Should().Be(AcceptedCommandId(result));
+        command.UserId.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task Delete_MustMarkTheCommandPendingBeforePublishingIt()
+    {
+        // Arrange
+        var controller = CreateController();
+        var marked = CaptureMarkedPending();
+
+        // Act
+        var result = await controller.Delete(5);
+
+        // Assert
+        marked.CommandId.Should().Be(AcceptedCommandId(result));
+        marked.BeforePublish.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Delete_MustNotDeleteTheUserItself()
     {
         // Arrange
         var controller = CreateController();
@@ -622,10 +436,76 @@ public class UsersControllerTests
         await controller.Delete(5);
 
         // Assert
-        _outputCache.Verify(c => c.EvictByTagAsync(OutputCachingExtensions.UsersTag, It.IsAny<CancellationToken>()), Times.Once);
+        _userService.Verify(s => s.DeleteAsync(It.IsAny<long>()), Times.Never);
     }
 
-    private User SetupUser(long id = 1, string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null)
+    private static void AssertAcceptedAtCommandStatus(ActionResult<CommandAcceptedResponse> result)
+    {
+        var accepted = result.Result.Should().BeOfType<AcceptedAtActionResult>().Subject;
+        accepted.ActionName.Should().Be(nameof(CommandsController.GetStatus));
+        accepted.ControllerName.Should().Be("Commands");
+        var body = accepted.Value.Should().BeOfType<CommandAcceptedResponse>().Subject;
+        body.CommandId.Should().NotBeEmpty();
+        accepted.RouteValues.Should().NotBeNull();
+        accepted.RouteValues!["id"].Should().Be(body.CommandId);
+    }
+
+    private static Guid AcceptedCommandId(ActionResult<CommandAcceptedResponse> result)
+        => ((CommandAcceptedResponse)((AcceptedAtActionResult)result.Result!).Value!).CommandId;
+
+    private List<ICommand> CapturePublishedCommands()
+    {
+        var published = new List<ICommand>();
+        _messageBus
+            .Setup(b => b.PublishAsync(It.IsAny<ICommand>(), It.IsAny<CancellationToken>()))
+            .Callback<ICommand, CancellationToken>((c, _) => published.Add(c))
+            .Returns(Task.CompletedTask);
+        return published;
+    }
+
+    private sealed class MarkedPending
+    {
+        public Guid? CommandId { get; set; }
+        public bool BeforePublish { get; set; }
+    }
+
+    // The worker may finish a command before this request returns; a Pending mark written after the publish
+    // could overwrite Completed. The mark must therefore come first.
+    private MarkedPending CaptureMarkedPending()
+    {
+        var marked = new MarkedPending();
+        _statusStore
+            .Setup(s => s.MarkPendingAsync(It.IsAny<Guid>()))
+            .Callback<Guid>(id =>
+            {
+                marked.CommandId = id;
+                marked.BeforePublish = !_messageBus.Invocations.Any(i => i.Method.Name == nameof(IMessageBus.PublishAsync));
+            })
+            .Returns(Task.CompletedTask);
+        return marked;
+    }
+
+    private static CreateUserRequest NewCreateRequest(string password = "12345") => new()
+    {
+        Forename = "Brand New",
+        Surname = "User",
+        Email = "brandnewuser@example.com",
+        DateOfBirth = new DateOnly(1995, 4, 12),
+        IsActive = true,
+        Password = password
+    };
+
+    private static UpdateUserRequest NewUpdateRequest(string? password = null) => new()
+    {
+        Forename = "Updated",
+        Surname = "User",
+        Email = "updated@example.com",
+        DateOfBirth = new DateOnly(1995, 4, 12),
+        IsActive = true,
+        Password = password
+    };
+
+    private User SetupUser(long id = 1, string forename = "Johnny", string surname = "User", string email = "juser@example.com", bool isActive = true, DateOnly? dateOfBirth = null, string? passwordHash = null)
     {
         var user = new User
         {
@@ -634,7 +514,8 @@ public class UsersControllerTests
             Surname = surname,
             Email = email,
             IsActive = isActive,
-            DateOfBirth = dateOfBirth ?? new DateOnly(1990, 1, 1)
+            DateOfBirth = dateOfBirth ?? new DateOnly(1990, 1, 1),
+            PasswordHash = passwordHash
         };
 
         _userService.Setup(s => s.GetByIdAsync(user.Id, It.IsAny<bool>())).ReturnsAsync(user);
@@ -705,7 +586,8 @@ public class UsersControllerTests
     private readonly Mock<IUserService> _userService = new();
     private readonly Mock<IUserLogService> _userLogService = new();
     private readonly Mock<ICredentialService> _credentialService = new();
-    private readonly Mock<IOutputCacheStore> _outputCache = new();
+    private readonly Mock<IMessageBus> _messageBus = new();
+    private readonly Mock<ICommandStatusStore> _statusStore = new();
     private readonly FakeLogger<UsersController> _logger = new();
-    private UsersController CreateController() => new(_userService.Object, _userLogService.Object, _credentialService.Object, _outputCache.Object, _logger);
+    private UsersController CreateController() => new(_userService.Object, _userLogService.Object, _credentialService.Object, _messageBus.Object, _statusStore.Object, _logger);
 }
