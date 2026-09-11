@@ -13,7 +13,6 @@ public class RecordUserLogCommandHandlerTests
     public async Task HandleAsync_MustPersistTheEntryExactlyAsCarried()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // The entry was built (snapshots serialized) where the action happened; this handler only writes it.
         var handler = CreateHandler();
         var entry = new UserLog { UserId = 5, Action = UserLogAction.Updated, Timestamp = DateTime.UtcNow, BeforeJson = "{}", AfterJson = "{}" };
 

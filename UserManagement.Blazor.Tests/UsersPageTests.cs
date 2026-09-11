@@ -70,8 +70,6 @@ public class UsersPageTests : BunitContext
     public async Task ModalOnSaved_MustReloadTheListForTheCurrentFilterAndCloseModal()
     {
         // Arrange
-        // The API only accepted the create; the new user's id is not known here. The page reloads the list
-        // it is showing rather than appending a row it cannot fill in.
         _usersApi.Setup(a => a.GetUsersAsync(UserListFilter.All)).ReturnsAsync([]);
         _usersApi.SetupSequence(a => a.GetUsersAsync(UserListFilter.Active))
             .ReturnsAsync([])

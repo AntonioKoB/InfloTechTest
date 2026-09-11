@@ -3,8 +3,8 @@ using Microsoft.AspNetCore.Components;
 namespace UserManagement.Blazor.Components.Users;
 
 /// <summary>
-/// A small spinner with a label, shown while an accepted command is waiting for its outcome. The id is what
-/// the tests (and anyone reading the DOM) use to tell the saving and deleting states apart.
+/// Spinner with a label, shown while a command waits for its outcome; the id tells the saving and deleting
+/// states apart.
 /// </summary>
 public partial class BusyIndicator
 {

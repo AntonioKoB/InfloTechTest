@@ -25,13 +25,11 @@ public class CredentialService : ICredentialService
         if (user is null || !user.IsActive || user.PasswordHash is null)
             return null;
 
-        // SuccessRehashNeeded (hash produced by an older format/work factor) still means the password was
-        // right - upgrading the stored hash on sign-in is a possible follow-up, not a reason to reject.
+        // SuccessRehashNeeded still means the password was right.
         var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
         return result == PasswordVerificationResult.Failed ? null : user;
     }
 
-    // Nothing to revoke while tokens are stateless; the audit entry (AuditingCredentialService) is the
-    // whole effect of signing out today.
+    // Nothing to revoke while tokens are stateless; the audit entry is the whole effect.
     public Task SignOutAsync(long userId) => Task.CompletedTask;
 }

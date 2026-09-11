@@ -6,15 +6,6 @@ using UserManagement.Api.Caching;
 
 namespace UserManagement.Api.Tests;
 
-/// <summary>
-/// The framework's default output-cache policy switches caching off for authenticated callers twice: at
-/// request time, for any request carrying an Authorization header, and again at response time, for any
-/// request whose user turned out to be authenticated. Every call to this API is both, so it would all go
-/// uncached. This policy is appended to the users list policy to opt that one endpoint back in at both
-/// points: the list is the same for every signed-in caller, so one shared cached response is correct. It
-/// must only ever do so for a GET, and at response time only under the default policy's other rules (a
-/// 200 that sets no cookie).
-/// </summary>
 public class CacheAuthenticatedRequestsPolicyTests
 {
     [Fact]
@@ -49,7 +40,7 @@ public class CacheAuthenticatedRequestsPolicyTests
     }
 
     [Fact]
-    public async Task ServeResponseAsync_WhenAuthenticatedResponseIsA200WithoutCookies_MustAllowStorage()
+    public async Task ServeResponseAsync_WhenAuthenticated200WithoutCookies_MustAllowStorage()
     {
         // Arrange
         var context = CreateContextLeftByTheDefaultPolicy(HttpMethods.Get);
@@ -93,10 +84,6 @@ public class CacheAuthenticatedRequestsPolicyTests
         context.AllowCacheStorage.Should().BeFalse();
     }
 
-    /// <summary>
-    /// The state the framework's default policy leaves behind for an authenticated request: caching enabled
-    /// for the endpoint, but lookup and storage both switched off because of the Authorization header.
-    /// </summary>
     private static OutputCacheContext CreateContextLeftByTheDefaultPolicy(string method)
     {
         var httpContext = new DefaultHttpContext();

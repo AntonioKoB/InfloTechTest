@@ -301,12 +301,7 @@ An update or a delete therefore invalidates in two places: the worker evicts the
 
 ### Production: Redis
 
-Both stores are in-process today, which is right for a single instance and wrong for a scaled-out App Service, where each instance would evict only itself. Both have a drop-in distributed replacement, and nothing in the policies, the worker or the decorator changes:
-
-- The output cache: add `Microsoft.AspNetCore.OutputCaching.StackExchangeRedis` and call `AddStackExchangeRedisOutputCache` next to `AddOutputCache`, with the connection string and an `InstanceName` key prefix. Tag eviction then works across instances.
-- The user cache: a `RedisCacheAdapter : ICache` over `IDistributedCache` (`Microsoft.Extensions.Caching.StackExchangeRedis`), registered in place of `MemoryCacheAdapter`. It must serialize the whole entity: `User.PasswordHash` is `[JsonIgnore]`d for the audit snapshots, so the default JSON contract would silently drop it from cached users and a later update would save it back as null.
-
-In Azure both point at Azure Cache for Redis. `ConnectionStrings:Redis` would join the connection string and the signing key in user secrets locally and in App Service configuration in production, and `Microsoft.Azure.StackExchangeRedis` adds Entra ID authentication with a managed identity once the Key Vault direction is taken.
+Both stores are in-process, which is right for a single instance and wrong for a scaled-out App Service, where each instance would evict only itself. Each has a drop-in distributed replacement (`AddStackExchangeRedisOutputCache` for the list; a Redis `ICache` adapter over `IDistributedCache` for the single user, which must serialize `PasswordHash` despite its `[JsonIgnore]`), and nothing in the policies, the worker or the decorator changes.
 
 ## Continuous integration
 
@@ -486,11 +481,7 @@ Both applications expose `GET /health` ([Health checks](#health-checks)). The AP
 
 ### Adding an environment
 
-Three additions and no change to the workflow's logic:
-
-1. a parameter file, `infra/<env>.bicepparam`, with its own `environmentName` (every resource name follows from it) and, if needed, its own hosting region;
-2. a federated credential whose subject names the trigger for that environment - for a GitHub environment with required reviewers, `repo:AntonioKoB@52575552/InfloTechTest@1357388560:environment:<env>`; for a release branch, the same prefix with `ref:refs/heads/<branch>` - so a token minted for one environment cannot deploy another;
-3. a second entry for the `infra` and deploy jobs (a matrix over the environment name, or a copy with `environment: <env>` set) that passes the parameter file and the resource group for that environment. The secrets can stay repository-wide or move to GitHub environment secrets, which is what `environment:` on a job is for.
+A new environment is a parameter file (`infra/<env>.bicepparam`, with its own `environmentName` and, if needed, hosting region), a federated credential whose subject names that environment's trigger (`...:environment:<env>` or `...:ref:refs/heads/<branch>`), and a second `infra`/deploy entry, or a matrix over the environment name, passing its parameter file and resource group. The workflow's logic does not change.
 
 ## Observability
 
@@ -523,14 +514,6 @@ Unhandled exceptions are recorded by the framework with no code of this project'
 | The worker stopped with the host | API `CommandWorker` | Information |
 
 The worker runs outside any request, so its SQL commands and its log lines appear as their own operations rather than under the request that accepted the command.
-
-### Where to look
-
-In the portal, open the `appi-inflo-<env>` resource:
-
-- **Transaction search** lists individual requests. Opening one shows its dependencies, exceptions and log lines on one timeline, across both hosts.
-- **Failures** groups failed requests, failed dependencies and exceptions by operation, with the exception details.
-- **Logs** runs KQL over the same data. `requests | take 5`, `dependencies | where type == "SQL"` and `traces | where severityLevel >= 2` (Warning and above) are useful first queries.
 
 ### Locally
 

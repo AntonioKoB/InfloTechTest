@@ -10,10 +10,6 @@ using ContractCommandState = UserManagement.Api.Contracts.Commands.CommandState;
 
 namespace UserManagement.Api.Tests;
 
-/// <summary>
-/// The status endpoint is how a caller learns what happened to a command the API accepted: the new user's id
-/// on a completed create, or the reason on a failure (a duplicate email lands here, not in a 400).
-/// </summary>
 public class CommandsControllerTests
 {
     [Fact]

@@ -5,9 +5,8 @@ using UserManagement.Services.Domain.Interfaces;
 namespace UserManagement.Services.Domain.Implementations;
 
 /// <summary>
-/// Decorates ICredentialService, recording a LoggedIn entry for every successful authentication and a
-/// LoggedOut entry for every sign-out - the session boundaries of a user's audit trail. Failed attempts
-/// are not recorded: there is no verified user to attribute them to.
+/// Records LoggedIn on a successful authentication and LoggedOut on sign-out. Failed attempts are not
+/// recorded.
 /// </summary>
 public class AuditingCredentialService : ICredentialService
 {

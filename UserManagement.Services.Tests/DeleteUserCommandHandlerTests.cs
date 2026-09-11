@@ -41,7 +41,6 @@ public class DeleteUserCommandHandlerTests
     public async Task HandleAsync_WhenTheUserDoesNotExist_MustStillDeleteAndRecordNothing()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // Delete is idempotent: an already-gone user is not an error, and there is nothing to audit for it.
         var handler = CreateHandler();
         _userService.Setup(s => s.GetByIdAsync(999, false)).ReturnsAsync((User?)null);
 

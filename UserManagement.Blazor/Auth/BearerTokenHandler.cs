@@ -9,9 +9,8 @@ using Microsoft.Extensions.Logging;
 namespace UserManagement.Blazor.Auth;
 
 /// <summary>
-/// Attaches the signed-in user's API bearer token to every outgoing API call. A 401 from the API means the
-/// token is no longer accepted (typically expired); the cookie expires with it, so a full page load lands
-/// the user on the login page with clean state instead of a stale circuit.
+/// Adds the signed-in user's bearer token to API calls. A 401 means the token has expired, so reload to the
+/// login page.
 /// </summary>
 public partial class BearerTokenHandler : DelegatingHandler
 {

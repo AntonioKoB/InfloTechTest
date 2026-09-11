@@ -23,8 +23,7 @@ public partial class UserRow : IDisposable
     [Inject] private ICommandPoller Poller { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
 
-    // Cancelled when the component is disposed, so a closed circuit does not keep a poll alive for the rest
-    // of the poller's timeout.
+    // Cancelled on dispose so a closed circuit does not keep polling.
     private readonly CancellationTokenSource _disposal = new();
 
     private bool _expanded;
@@ -77,7 +76,6 @@ public partial class UserRow : IDisposable
         {
             var accepted = await UsersApi.UpdateUserAsync(User.Id, ToUpdateRequest(_editModel));
 
-            // The API only accepted the update; the typed values are confirmed once the worker reports Completed.
             var outcome = await Poller.WaitForOutcomeAsync(accepted.CommandId, _disposal.Token);
             if (outcome.State == CommandState.Failed)
             {
@@ -120,7 +118,6 @@ public partial class UserRow : IDisposable
         {
             var accepted = await UsersApi.DeleteUserAsync(User.Id);
 
-            // The row goes only once the worker reports the user deleted.
             var outcome = await Poller.WaitForOutcomeAsync(accepted.CommandId, _disposal.Token);
             if (outcome.State == CommandState.Failed)
             {

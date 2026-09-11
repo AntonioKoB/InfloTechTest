@@ -5,11 +5,6 @@ using UserManagement.Api.Health;
 
 namespace UserManagement.Api.Tests;
 
-/// <summary>
-/// Locks in the API's health-check registration: the database connectivity check is what makes /health mean
-/// "up and able to serve" rather than "the process exists". The endpoint mapping, its anonymous access and
-/// the 200/503 responses are framework middleware configured in Program.cs, proven by manual verification.
-/// </summary>
 public class HealthCheckExtensionsTests
 {
     [Fact]

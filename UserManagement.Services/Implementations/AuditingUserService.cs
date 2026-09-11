@@ -6,11 +6,8 @@ using UserManagement.Services.Domain.Interfaces;
 namespace UserManagement.Services.Domain.Implementations;
 
 /// <summary>
-/// Decorates IUserService, recording an audit log entry for GetByIdAsync calls that opt in via
-/// recordAsViewed. GetByIdAsync is shared by the View screen, Edit's form pre-fill, Edit's own re-fetch
-/// before saving, and Delete's confirmation screen - only the caller knows which of these it is, so it says
-/// so via recordAsViewed rather than the decorator guessing from context. Writes pass straight through: the
-/// Created/Updated/Deleted entries are recorded by the command handlers that perform them.
+/// Records a Viewed entry for GetByIdAsync calls that opt in through recordAsViewed. Writes pass through;
+/// their entries are recorded by the command handlers.
 /// </summary>
 public class AuditingUserService : IUserService
 {

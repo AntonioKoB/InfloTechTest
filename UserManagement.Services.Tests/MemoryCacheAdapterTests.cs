@@ -7,12 +7,6 @@ using UserManagement.Services.Caching;
 
 namespace UserManagement.Data.Tests;
 
-/// <summary>
-/// The in-process implementation of the cache contract the service layer depends on. The contract is what a
-/// future distributed implementation (e.g. Redis) has to honour, so these tests describe the contract, not
-/// the memory cache underneath: a value that was set comes back, a key that was never set or was removed
-/// does not, and an entry that has outlived its time-to-live is gone.
-/// </summary>
 public class MemoryCacheAdapterTests
 {
     [Fact]

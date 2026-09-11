@@ -28,7 +28,6 @@ public class AddUserModalTests : BunitContext
         Services.AddSingleton(_poller.Object);
         Services.AddSingleton(_snackbar.Object);
 
-        // Unless a test says otherwise, every accepted command completes.
         _poller.Setup(p => p.WaitForOutcomeAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid id, CancellationToken _) => Completed(id));
     }
@@ -59,8 +58,6 @@ public class AddUserModalTests : BunitContext
     public async Task ClickSave_MustCallCreateUserAsyncWaitForTheOutcomeAndRaiseOnSavedWithSnackbar()
     {
         // Arrange
-        // The API accepts the create and returns a command id; OnSaved fires once the poller reports
-        // Completed, so the page reloads a list that already holds the new user.
         var accepted = Accepted();
         _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>())).ReturnsAsync(accepted);
         var wasSaved = false;
@@ -107,8 +104,6 @@ public class AddUserModalTests : BunitContext
     public async Task SaveWhenTheCommandFails_MustShowTheFailureInTheEmailErrorSlotAndNotRaiseOnSaved()
     {
         // Arrange
-        // The duplicate email is caught by the worker, not by the request: it arrives as a Failed status
-        // and lands in the same slot the form already uses for an email error.
         var accepted = Accepted();
         _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>())).ReturnsAsync(accepted);
         _poller.Setup(p => p.WaitForOutcomeAsync(accepted.CommandId, It.IsAny<CancellationToken>()))
@@ -158,7 +153,6 @@ public class AddUserModalTests : BunitContext
     public async Task DisposeWhilePending_MustCancelThePoll()
     {
         // Arrange
-        // A circuit that goes away mid-save must not keep the poll running for the rest of the timeout.
         var accepted = Accepted();
         _usersApi.Setup(a => a.CreateUserAsync(It.IsAny<CreateUserRequest>())).ReturnsAsync(accepted);
         var pending = new TaskCompletionSource<CommandStatusResponse>();
@@ -249,8 +243,6 @@ public class AddUserModalTests : BunitContext
     public async Task ClickSaveWithBlankPassword_MustNotCallCreateUserAsync()
     {
         // Arrange
-        // A new user cannot exist without a credential - the form must refuse to submit rather than let the
-        // API reject it after the round trip.
         var cut = Render<AddUserModal>(p => p.Add(x => x.Visible, true));
         FillForm(cut, password: null);
 

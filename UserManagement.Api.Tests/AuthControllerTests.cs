@@ -72,9 +72,6 @@ public class AuthControllerTests
     public async Task Login_WhenCredentialsAreInvalid_MustReturnUnauthorizedWithoutIssuingAToken()
     {
         // Arrange
-        // A single 401 for every failure reason (unknown email, wrong password, inactive user) - the
-        // credential service already collapses them to null, and telling a caller which one it was would
-        // leak whether an email is registered.
         var controller = CreateController();
         _credentialService.Setup(s => s.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync((User?)null);
 
@@ -91,8 +88,6 @@ public class AuthControllerTests
     public async Task Login_WhenCredentialsAreInvalid_MustLogTheEmailAtWarningWithoutThePassword()
     {
         // Arrange
-        // A run of these for one email is what a guessing attempt looks like, so it is a Warning. The
-        // submitted password must never reach a log.
         var controller = CreateController();
         _credentialService.Setup(s => s.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync((User?)null);
 
@@ -109,8 +104,6 @@ public class AuthControllerTests
     public async Task Logout_MustEndTheSessionOfTheUserNamedInTheBearerToken()
     {
         // Arrange
-        // No body on this endpoint: the validated token's subject is the only trustworthy statement of who is
-        // signing out.
         var controller = CreateController();
         SignInAs(controller, userId: 7);
 

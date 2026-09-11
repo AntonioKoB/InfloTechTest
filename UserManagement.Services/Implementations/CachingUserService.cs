@@ -8,19 +8,13 @@ using UserManagement.Services.Domain.Interfaces;
 namespace UserManagement.Services.Domain.Implementations;
 
 /// <summary>
-/// Cache-aside decorator for a single user by id. It sits beneath AuditingUserService on purpose, so a read
-/// served from memory is still recorded as a view by the layer above - the reason this cache lives in the
-/// service layer rather than at the HTTP layer, where a hit never reaches the audit. The cache holds and
-/// hands out copies: the API's update flow mutates the fetched user in place before saving it, and on a
-/// miss the tracked entity must be the one returned, so the copy is what goes into the cache. Update and
-/// Delete invalidate whether or not they succeed - a failed save can mean the row changed or vanished
-/// underneath, and the cost is one extra read. Not cached here: the lists (cached at the HTTP layer by the
-/// API's output caching), the email lookup (uniqueness checks and sign-in must see the database), and
-/// misses (an id that does not exist now may after the next create).
+/// Cache-aside for a single user by id, beneath AuditingUserService so a hit is still audited. Hands out
+/// copies, since callers mutate the fetched user in place; Update and Delete invalidate whether or not they
+/// succeed; misses, lists and the email lookup are not cached.
 /// </summary>
 public class CachingUserService : IUserService
 {
-    // The safety net behind explicit invalidation, not the primary mechanism.
+    // Safety net behind explicit invalidation.
     private static readonly TimeSpan TimeToLive = TimeSpan.FromMinutes(5);
 
     private readonly IUserService _inner;

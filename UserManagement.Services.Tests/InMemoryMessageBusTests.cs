@@ -6,10 +6,6 @@ using UserManagement.Services.Messaging;
 
 namespace UserManagement.Data.Tests;
 
-/// <summary>
-/// The in-memory transport is a channel inside the API process. Order and the blocking read are what the
-/// worker relies on; durability across restarts is deliberately not a property of this implementation.
-/// </summary>
 public class InMemoryMessageBusTests
 {
     [Fact]
@@ -65,7 +61,6 @@ public class InMemoryMessageBusTests
     public async Task ConsumeAsync_WhenCancelled_MustStopWithOperationCanceled()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // The worker's stopping token is the only way out of the consume loop.
         var bus = new InMemoryMessageBus();
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
         var act = async () =>

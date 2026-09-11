@@ -31,7 +31,6 @@ public class UserRowTests : BunitContext
         Services.AddSingleton(_poller.Object);
         Services.AddSingleton(_snackbar.Object);
 
-        // Unless a test says otherwise, every accepted command completes.
         _poller.Setup(p => p.WaitForOutcomeAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid id, CancellationToken _) => Completed(id));
     }
@@ -125,11 +124,9 @@ public class UserRowTests : BunitContext
     }
 
     [Fact]
-    public async Task EditMode_ClickSave_MustCallUpdateUserAsyncWaitForTheOutcomeAndRaiseOnSavedWithTheEditedValues()
+    public async Task EditMode_ClickSave_MustUpdateWaitForOutcomeAndRaiseOnSaved()
     {
         // Arrange
-        // The API accepts the update and returns a command id. Once the poller reports Completed the typed
-        // values are confirmed saved, so they are what OnSaved carries and what the row renders.
         var user = SetupUser();
         var accepted = Accepted();
         _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>())).ReturnsAsync(accepted);
@@ -224,8 +221,6 @@ public class UserRowTests : BunitContext
     public async Task EditMode_PasswordInputStartsBlank_AndSavingWithoutTypingOneMustSendNullPassword()
     {
         // Arrange
-        // The stored hash is never shown or pre-filled. Leaving the field blank means "keep the current
-        // password", which the API expects as a null Password on the update request.
         var user = SetupUser();
         UpdateUserRequest? sentRequest = null;
         _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>()))
@@ -302,10 +297,9 @@ public class UserRowTests : BunitContext
     }
 
     [Fact]
-    public async Task ClickDelete_MustCallDeleteUserAsyncWaitForTheOutcomeAndRaiseOnDeletedWithSnackbar()
+    public async Task ClickDelete_MustDeleteWaitForOutcomeAndRaiseOnDeleted()
     {
         // Arrange
-        // The row goes only once the worker has actually deleted the user.
         var user = SetupUser();
         var accepted = Accepted();
         _usersApi.Setup(a => a.DeleteUserAsync(user.Id)).ReturnsAsync(accepted);
@@ -391,7 +385,6 @@ public class UserRowTests : BunitContext
     public async Task DisposeWhileASaveIsPending_MustCancelThePoll()
     {
         // Arrange
-        // A circuit that goes away mid-save must not keep the poll running for the rest of the timeout.
         var user = SetupUser();
         var accepted = Accepted();
         _usersApi.Setup(a => a.UpdateUserAsync(user.Id, It.IsAny<UpdateUserRequest>())).ReturnsAsync(accepted);

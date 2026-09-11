@@ -5,8 +5,7 @@ namespace UserManagement.Api.Auth;
 public interface IJwtTokenService
 {
     /// <summary>
-    /// Issue a signed bearer token identifying the given (already authenticated) user, valid for the
-    /// configured lifetime.
+    /// Issue a signed bearer token for an authenticated user.
     /// </summary>
     /// <param name="user"></param>
     /// <returns></returns>

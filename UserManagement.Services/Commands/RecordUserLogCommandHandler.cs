@@ -5,8 +5,7 @@ using UserManagement.Data;
 namespace UserManagement.Services.Commands;
 
 /// <summary>
-/// Writes an audit entry that was built where the action happened. Nothing is recomputed here, so the entry
-/// reflects the state at the time of the action however long it waited on the bus.
+/// Writes the entry as built; nothing is recomputed.
 /// </summary>
 public class RecordUserLogCommandHandler : ICommandHandler<RecordUserLogCommand>
 {

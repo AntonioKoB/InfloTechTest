@@ -1,8 +1,7 @@
 namespace UserManagement.Api.Contracts.Commands;
 
 /// <summary>
-/// The outcome of an accepted command. UserId is set once the command Completed (for a create, this is the
-/// only place the new id appears); Error carries the reason when it Failed.
+/// Outcome of an accepted command. UserId is set once Completed; Error carries the reason when Failed.
 /// </summary>
 public class CommandStatusResponse
 {

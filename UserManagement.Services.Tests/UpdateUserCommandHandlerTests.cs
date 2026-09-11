@@ -8,10 +8,6 @@ using UserManagement.Services.Domain.Interfaces;
 
 namespace UserManagement.Data.Tests;
 
-/// <summary>
-/// The update handler re-reads the user in its own scope, applies the command's fields to that instance and
-/// saves it, keeping a copy of the pre-mutation state as the Updated entry's "before" snapshot.
-/// </summary>
 public class UpdateUserCommandHandlerTests
 {
     [Fact]
@@ -63,11 +59,9 @@ public class UpdateUserCommandHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_MustRecordAnUpdatedLogWithThePreMutationStateAsBeforeAndTheSavedUserAsAfter()
+    public async Task HandleAsync_MustRecordUpdatedLogWithBeforeAndAfterSnapshots()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // The fetched instance is mutated in place, so "before" has to be a copy taken before the fields are
-        // applied - otherwise both snapshots would show the new values and the diff would be empty.
         var handler = CreateHandler();
         var existing = SetupExistingUser();
         var command = NewCommand();
@@ -87,8 +81,6 @@ public class UpdateUserCommandHandlerTests
     public async Task HandleAsync_WhenTheUserNoLongerExists_MustThrowWithoutSavingOrRecording()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // The API checked the id when it accepted the command; the row can still vanish before the worker
-        // gets to it, and that is reported as a failure of this command, not swallowed.
         var handler = CreateHandler();
         _userService.Setup(s => s.GetByIdAsync(5, false)).ReturnsAsync((User?)null);
 

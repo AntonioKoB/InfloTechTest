@@ -27,8 +27,7 @@ public partial class UsersPage
 
     private void OpenAddModal() => _showAddModal = true;
 
-    // The API only accepted the create; the new user's id is not known here, so the list is reloaded rather
-    // than a row appended.
+    // Only accepted so far and the new id is unknown, so reload the list.
     private async Task HandleUserAdded()
     {
         _showAddModal = false;

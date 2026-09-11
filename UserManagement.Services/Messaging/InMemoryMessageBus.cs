@@ -7,8 +7,8 @@ using UserManagement.Services.Commands;
 namespace UserManagement.Services.Messaging;
 
 /// <summary>
-/// A channel inside the process: unbounded, first in first out, one consumer. Nothing survives a restart
-/// and nothing is shared across instances - see the README for why that is acceptable here.
+/// An unbounded in-process channel with one consumer. Nothing survives a restart or is shared across
+/// instances.
 /// </summary>
 public class InMemoryMessageBus : IMessageBus
 {

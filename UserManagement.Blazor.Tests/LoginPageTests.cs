@@ -32,9 +32,6 @@ public class LoginPageTests : BunitContext
     public void Render_MustPostTheFormToTheLoginEndpointWithAnAntiforgeryToken()
     {
         // Arrange
-        // Login is a genuine HTTP form post to the Blazor host (not a SignalR event) so the server can issue
-        // the auth cookie. The field names bind to LoginRequest; the hidden antiforgery field is what lets
-        // the endpoint validate that the post came from this page.
 
         // Act
         var cut = Render<LoginPage>();

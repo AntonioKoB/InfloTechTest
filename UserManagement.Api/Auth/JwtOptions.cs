@@ -8,8 +8,7 @@ public class JwtOptions
     public string Audience { get; set; } = "";
 
     /// <summary>
-    /// HMAC-SHA256 signing key, at least 32 bytes. Supplied through user-secrets or the environment, never
-    /// committed - the same rule as the connection string.
+    /// HMAC-SHA256 signing key, at least 32 bytes. User-secrets or environment, never committed.
     /// </summary>
     public string SigningKey { get; set; } = "";
 

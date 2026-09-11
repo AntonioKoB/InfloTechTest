@@ -67,8 +67,6 @@ public partial class UsersController : ControllerBase
         return Ok(logs.Select(l => l.ToDto()));
     }
 
-    // The three writes are accepted here and executed by the worker; see AcceptAsync.
-
     [HttpPost]
     public async Task<ActionResult<CommandAcceptedResponse>> Create(CreateUserRequest request)
     {
@@ -102,9 +100,7 @@ public partial class UsersController : ControllerBase
     public async Task<ActionResult<CommandAcceptedResponse>> Delete(long id)
         => await AcceptAsync(new DeleteUserCommand(Guid.NewGuid(), id));
 
-    // Marks the command Pending before publishing it: the worker can finish before this request returns, and
-    // a Pending mark written after the publish would overwrite its outcome. The 202 points at the status
-    // endpoint through the Location header and carries the same id in the body.
+    // Mark Pending before publishing: the worker can finish before this request returns.
     private async Task<ActionResult<CommandAcceptedResponse>> AcceptAsync(ICommand command)
     {
         await _statusStore.MarkPendingAsync(command.CommandId);
@@ -112,8 +108,6 @@ public partial class UsersController : ControllerBase
         return AcceptedAtAction(nameof(CommandsController.GetStatus), "Commands", new { id = command.CommandId }, new CommandAcceptedResponse { CommandId = command.CommandId });
     }
 
-    // Handled errors, logged where they are handled so the reason survives the response. A missing id is a
-    // client mistake and stays at Information.
     [LoggerMessage(EventId = 1001, Level = LogLevel.Information, Message = "User {UserId} was not found")]
     private partial void LogUserNotFound(long userId);
 }

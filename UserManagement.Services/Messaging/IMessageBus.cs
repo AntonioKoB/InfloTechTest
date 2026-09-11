@@ -6,15 +6,14 @@ using UserManagement.Services.Commands;
 namespace UserManagement.Services.Messaging;
 
 /// <summary>
-/// The transport between the API (publisher) and the worker (consumer). The in-memory implementation is a
-/// channel inside the API process; a broker-backed one (Azure Service Bus) fits the same two calls.
+/// Transport between the API (publisher) and the worker (consumer).
 /// </summary>
 public interface IMessageBus
 {
     Task PublishAsync(ICommand command, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Commands in the order they were published; waits when there are none and ends only on cancellation.
+    /// Commands in publish order; waits when there are none, ends on cancellation.
     /// </summary>
     IAsyncEnumerable<ICommand> ConsumeAsync(CancellationToken cancellationToken);
 }

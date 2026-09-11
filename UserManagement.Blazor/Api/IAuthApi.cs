@@ -9,7 +9,7 @@ public interface IAuthApi
     Task<LoginResponse> LoginAsync([Body] LoginRequest request);
 
     /// <summary>
-    /// Ends the session identified by the given token, which Refit sends as the bearer Authorization header.
+    /// Ends the session; Refit sends the token as the bearer header.
     /// </summary>
     [Post("/api/auth/logout")]
     Task LogoutAsync([Authorize("Bearer")] string token);

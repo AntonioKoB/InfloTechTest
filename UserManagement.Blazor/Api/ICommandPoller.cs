@@ -9,8 +9,7 @@ namespace UserManagement.Blazor.Api;
 public interface ICommandPoller
 {
     /// <summary>
-    /// Returns the first status that is no longer Pending. Throws <see cref="TimeoutException"/> when the
-    /// command is still Pending after the poller's timeout, so a lost command never looks like a slow one.
+    /// Returns the first status that is no longer Pending, or throws TimeoutException.
     /// </summary>
     Task<CommandStatusResponse> WaitForOutcomeAsync(Guid commandId, CancellationToken cancellationToken = default);
 }

@@ -83,8 +83,6 @@ public class CredentialServiceTests
     public async Task AuthenticateAsync_WhenUserIsNotActive_MustReturnNullEvenWithTheRightPassword()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // IsActive is the app's own notion of a disabled account - a deactivated user keeps their row (and
-        // their history) but must not be able to sign in.
         var service = CreateService();
         var user = SetupUser(password: "12345", isActive: false);
 
@@ -99,8 +97,6 @@ public class CredentialServiceTests
     public async Task SignOutAsync_MustCompleteWithoutTouchingTheUserStore()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // Tokens are stateless, so there is nothing to revoke and the audit entry lives in the decorator. This
-        // pins down that the base service stays a no-op rather than, say, deactivating the user.
         var service = CreateService();
 
         // Act: Invokes the method under test with the arranged parameters.

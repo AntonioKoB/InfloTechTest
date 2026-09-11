@@ -10,13 +10,6 @@ using UserManagement.Services.Domain.Interfaces;
 
 namespace UserManagement.Data.Tests;
 
-/// <summary>
-/// Caches a single user by id beneath the auditing decorator, so a read served from memory is still audited
-/// by the layer above (see ServiceCollectionExtensionsTests for the order). Lists are cached at the HTTP
-/// layer by the API's output caching instead, so they and the email lookup pass straight through here. The
-/// cache hands out copies: callers mutate the user they were given before saving it, and that must never
-/// reach the cached one.
-/// </summary>
 public class CachingUserServiceTests
 {
     [Fact]
@@ -37,7 +30,7 @@ public class CachingUserServiceTests
     }
 
     [Fact]
-    public async Task GetByIdAsync_WhenTheRecordAsViewedFlagDiffersBetweenCalls_MustStillServeTheSecondCallFromCache()
+    public async Task GetByIdAsync_WhenRecordAsViewedDiffers_MustStillServeFromCache()
     {
         // Arrange: the flag only matters to the auditing decorator above; the cached user is the same either way.
         var service = CreateService();
@@ -146,7 +139,6 @@ public class CachingUserServiceTests
     public async Task UpdateAsync_WhenInnerThrows_MustStillInvalidateThatUser()
     {
         // Arrange: a failed save can mean the row changed or vanished underneath (UserNoLongerExistsException),
-        // so a write attempt invalidates whether or not it succeeded - the cost is one extra read.
         var service = CreateService();
         var user = SetupUser();
         await service.GetByIdAsync(user.Id);

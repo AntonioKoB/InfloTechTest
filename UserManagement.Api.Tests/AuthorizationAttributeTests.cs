@@ -5,13 +5,6 @@ using UserManagement.Api.Controllers;
 
 namespace UserManagement.Api.Tests;
 
-/// <summary>
-/// Locks in the API's authorization posture: every endpoint requires an authenticated caller except the one
-/// that hands out the token in the first place. The bearer-token validation itself is framework middleware
-/// configured in Program.cs, proven by manual verification (an unauthenticated call is rejected with 401, a
-/// call carrying a token from /api/auth/login succeeds); what a unit test can pin down is that the
-/// controllers opt in to it and that nothing else is left open.
-/// </summary>
 public class AuthorizationAttributeTests
 {
     [Theory]

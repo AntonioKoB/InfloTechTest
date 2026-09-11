@@ -5,8 +5,7 @@ using System.Threading.Tasks;
 namespace UserManagement.Services.Commands;
 
 /// <summary>
-/// Statuses in a dictionary inside the process: lost on restart, invisible to other instances, and never
-/// expired. Enough for a single instance; a table replaces it without touching its callers.
+/// Statuses in a dictionary: lost on restart, per instance, never expired. Enough for a single instance.
 /// </summary>
 public class InMemoryCommandStatusStore : ICommandStatusStore
 {

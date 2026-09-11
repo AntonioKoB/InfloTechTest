@@ -12,16 +12,10 @@ using UserManagement.Services.Messaging;
 
 namespace UserManagement.Data.Tests;
 
-/// <summary>
-/// Pins what the registration alone decides: the decorator order (the user cache sits beneath the audit, so
-/// a read served from memory is still recorded as a view), that every command has a handler, and that an
-/// audit entry leaves as one command on the bus rather than being written inline. Resolves through the real
-/// AddDomainServices with only the data access mocked.
-/// </summary>
 public class ServiceCollectionExtensionsTests
 {
     [Fact]
-    public async Task AddDomainServices_WhenAUserIsReadTwiceAsViewed_MustHitTheDatabaseOnceAndPublishTwoViewedLogCommands()
+    public async Task AddDomainServices_WhenUserReadTwiceAsViewed_MustHitDatabaseOnceAndLogTwice()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var user = new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1) };
@@ -64,11 +58,9 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public async Task AddDomainServices_WhenACreateCommandIsHandled_MustPublishExactlyOneLogCommandAndWriteNoLogInline()
+    public async Task AddDomainServices_WhenCreateHandled_MustPublishOneLogCommandOnly()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // The handler writes through the decorated IUserService. If the auditing decorator still recorded
-        // Created on its own, the same write would produce two log commands.
         var dataContext = new Mock<IDataContext>();
         dataContext.Setup(d => d.FirstOrDefaultAsync<User>(It.IsAny<Expression<Func<User, bool>>>())).ReturnsAsync((User?)null);
         dataContext.Setup(d => d.CreateAsync(It.IsAny<User>())).Callback<User>(u => u.Id = 7).Returns(Task.CompletedTask);

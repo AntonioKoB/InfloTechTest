@@ -17,11 +17,9 @@ public class NavMenuTests : BunitContext
     }
 
     [Fact]
-    public void WhenSignedIn_MustShowNavigationTheUserNameAndALogoutFormPostingToTheLogoutEndpoint()
+    public void WhenSignedIn_MustShowNavigationUserNameAndLogoutForm()
     {
         // Arrange
-        // Logout changes who the browser is signed in as, so like login it is a real form post carrying the
-        // antiforgery token, not a client-side click handler.
         var authorization = AddAuthorization();
         authorization.SetAuthorized("Peter Loew");
 

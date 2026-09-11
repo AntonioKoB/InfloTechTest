@@ -141,7 +141,6 @@ public class UsersControllerTests
     public async Task GetById_WhenUserDoesNotExist_MustLogTheMissingIdAtInformation()
     {
         // Arrange
-        // A bad id is a client mistake, not a fault: worth a trace, not a Warning.
         var controller = CreateController();
         _userService.Setup(s => s.GetByIdAsync(It.IsAny<long>(), It.IsAny<bool>())).ReturnsAsync((User?)null);
 
@@ -173,10 +172,6 @@ public class UsersControllerTests
             .Which.Value.Should().BeAssignableTo<IEnumerable<UserLogDto>>()
             .Which.Should().ContainSingle(l => l.Id == 1 && l.UserId == user.Id);
     }
-
-    // The API accepts a write and returns 202; the worker executes it. Each mutation therefore publishes a
-    // command, marks it Pending, and points the caller at the status endpoint - and does not touch the
-    // service's write methods itself.
 
     [Fact]
     public async Task Create_WhenValid_MustReturnAcceptedAtTheCommandStatusEndpointWithTheCommandId()
@@ -216,8 +211,6 @@ public class UsersControllerTests
     public async Task Create_WhenValid_MustPublishThePasswordHashNeverTheClearText()
     {
         // Arrange
-        // The clear-text password exists only inside this request. The command that travels on the bus
-        // carries the hash the credential service produced, so no transport ever sees the password.
         var controller = CreateController();
         var request = NewCreateRequest(password: "12345");
         _credentialService.Setup(c => c.SetPassword(It.IsAny<User>(), "12345")).Callback<User, string>((u, _) => u.PasswordHash = "hashed-12345");
@@ -261,7 +254,7 @@ public class UsersControllerTests
     }
 
     [Fact]
-    public async Task Update_WhenUserExists_MustReturnAcceptedAtTheCommandStatusEndpointWithTheCommandId()
+    public async Task Update_WhenUserExists_MustReturnAcceptedAtStatusEndpoint()
     {
         // Arrange
         var controller = CreateController();
@@ -316,11 +309,9 @@ public class UsersControllerTests
     }
 
     [Fact]
-    public async Task Update_WhenPasswordNotSupplied_MustPublishNoHashAndLeaveTheCredentialServiceAlone()
+    public async Task Update_WhenPasswordNotSupplied_MustPublishNoHash()
     {
         // Arrange
-        // Editing a user's details must not silently reset their password - a blank password on Update
-        // means "keep the current one", which the command expresses as a null hash.
         var controller = CreateController();
         SetupUser(id: 5, forename: "Existing", passwordHash: "old-hash");
         var published = CapturePublishedCommands();
@@ -368,8 +359,6 @@ public class UsersControllerTests
     public async Task Update_WhenUserDoesNotExist_MustReturnNotFoundAndPublishNothing()
     {
         // Arrange
-        // Checking the id is validation of the request, not execution of it: an unknown user is a 404 now,
-        // not a Failed status later.
         var controller = CreateController();
         _userService.Setup(s => s.GetByIdAsync(999, It.IsAny<bool>())).ReturnsAsync((User?)null);
 
@@ -469,8 +458,6 @@ public class UsersControllerTests
         public bool BeforePublish { get; set; }
     }
 
-    // The worker may finish a command before this request returns; a Pending mark written after the publish
-    // could overwrite Completed. The mark must therefore come first.
     private MarkedPending CaptureMarkedPending()
     {
         var marked = new MarkedPending();

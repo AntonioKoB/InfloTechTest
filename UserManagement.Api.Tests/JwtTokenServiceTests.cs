@@ -30,8 +30,6 @@ public class JwtTokenServiceTests
     public async Task CreateToken_MustNotValidateWithADifferentSigningKey()
     {
         // Arrange
-        // The whole point of signing: the API accepts only tokens it issued itself, so a token signed with any
-        // other key - however well-formed - must be rejected.
         var service = CreateService();
         var user = CreateUser();
 

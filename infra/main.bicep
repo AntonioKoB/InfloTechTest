@@ -2,9 +2,7 @@
 //
 //   az deployment group create --resource-group rg-inflo-dev --template-file infra/main.bicep --parameters infra/dev.bicepparam
 //
-// The environment name drives every resource name, so a new environment is one more .bicepparam file.
-// The three secret parameters are read from environment variables at deploy time (see dev.bicepparam)
-// and never stored in the repository. The README's "Infrastructure" section explains the tier choices.
+// The environment name drives every resource name; the secret parameters come from environment variables at deploy time.
 
 targetScope = 'resourceGroup'
 
@@ -49,10 +47,8 @@ var tags = {
   environment: environmentName
 }
 
-// Both hosts run .NET 10 on Linux. App Service terminates TLS at its front end and forwards plain HTTP to
-// the container, so the apps need the forwarded headers to know the original request was HTTPS; without
-// that UseHttpsRedirection would redirect forever. Health check is not active on the Free tier; the path
-// is set so it starts working the moment the plan is scaled up.
+// App Service terminates TLS at its front end, so the apps need forwarded headers or UseHttpsRedirection
+// loops. Health check is not active on the Free tier; the path is set for when the plan is scaled up.
 var commonSiteConfig = {
   linuxFxVersion: 'DOTNETCORE|10.0'
   alwaysOn: false // Not available on F1.
@@ -128,8 +124,7 @@ resource sqlDatabase 'Microsoft.Sql/servers/databases@2025-01-01' = {
     capacity: 2
   }
   properties: {
-    // A monthly allowance of vCore-seconds; when it is exhausted the database pauses until the next
-    // month instead of billing.
+    // Monthly vCore-second allowance; the database pauses instead of billing when it runs out.
     useFreeLimit: true
     freeLimitExhaustionBehavior: 'AutoPause'
     autoPauseDelay: 60
@@ -141,8 +136,7 @@ resource sqlDatabase 'Microsoft.Sql/servers/databases@2025-01-01' = {
   }
 }
 
-// The API runs the EF Core migrations at startup, so App Service must be able to reach the server.
-// This rule name has a special meaning: it allows connections from Azure services only.
+// Allows connections from Azure services only; the API runs the migrations at startup.
 resource sqlAllowAzureServices 'Microsoft.Sql/servers/firewallRules@2025-01-01' = {
   parent: sqlServer
   name: 'AllowAllWindowsAzureIps'

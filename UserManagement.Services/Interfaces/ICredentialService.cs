@@ -6,16 +6,14 @@ namespace UserManagement.Services.Domain.Interfaces;
 public interface ICredentialService
 {
     /// <summary>
-    /// Hash the given plain-text password and store only the hash on the user. Does not persist - the
-    /// caller saves the user through IUserService as usual. The plain-text password is never stored.
+    /// Hash the password and store only the hash on the user. Does not persist.
     /// </summary>
     /// <param name="user"></param>
     /// <param name="password"></param>
     void SetPassword(User user, string password);
 
     /// <summary>
-    /// Return the user matching the given email and password, or null if the email is unknown, the
-    /// password is wrong, or the user is not active.
+    /// Return the user for a matching email and password, or null.
     /// </summary>
     /// <param name="email"></param>
     /// <param name="password"></param>
@@ -23,9 +21,8 @@ public interface ICredentialService
     Task<User?> AuthenticateAsync(string email, string password);
 
     /// <summary>
-    /// End the given user's session on the server side. Tokens are stateless, so there is nothing to revoke
-    /// today - the call exists so that signing out is audited exactly like signing in, and so that token
-    /// revocation can be added here later without touching any caller.
+    /// End the user's session server-side. A no-op today; kept so sign-out is audited and revocation has a
+    /// home.
     /// </summary>
     /// <param name="userId"></param>
     /// <returns></returns>

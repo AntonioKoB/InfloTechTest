@@ -1,8 +1,8 @@
 namespace UserManagement.Api.Contracts.Commands;
 
 /// <summary>
-/// The body of a 202 Accepted: the command was queued, not executed. Poll GET /api/commands/{CommandId}
-/// (also given as the response's Location header) until it reports Completed or Failed.
+/// Body of a 202: the command was queued. Poll GET /api/commands/{CommandId} (also the Location header) for
+/// the outcome.
 /// </summary>
 public class CommandAcceptedResponse
 {

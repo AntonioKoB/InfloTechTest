@@ -9,7 +9,7 @@ namespace UserManagement.Data.Tests;
 public class AuditingCredentialServiceTests
 {
     [Fact]
-    public async Task AuthenticateAsync_WhenTheInnerServiceReturnsAUser_MustRecordALoggedInEntryForThatUser()
+    public async Task AuthenticateAsync_WhenInnerServiceReturnsUser_MustRecordLoggedIn()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var service = CreateService();
@@ -28,7 +28,6 @@ public class AuditingCredentialServiceTests
     public async Task AuthenticateAsync_WhenTheInnerServiceRejectsTheCredentials_MustRecordNothing()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // A failed attempt has no verified user to attribute it to, so it leaves no audit entry.
         var service = CreateService();
         _inner.Setup(s => s.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync((User?)null);
 
@@ -58,7 +57,6 @@ public class AuditingCredentialServiceTests
     public void SetPassword_MustPassStraightThroughWithoutRecordingAnything()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // Setting a password is part of creating/updating a user, which AuditingUserService already records.
         var service = CreateService();
         var user = CreateUser();
 

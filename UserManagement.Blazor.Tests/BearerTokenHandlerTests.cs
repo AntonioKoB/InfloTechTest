@@ -16,7 +16,7 @@ namespace UserManagement.Blazor.Tests;
 public class BearerTokenHandlerTests
 {
     [Fact]
-    public async Task SendAsync_WhenTheSignedInUserHasAnAccessToken_MustSendItAsABearerAuthorizationHeader()
+    public async Task SendAsync_WhenUserHasAccessToken_MustSendBearerHeader()
     {
         // Arrange
         var client = CreateClient(SignedInWithToken("jwt-token"), respondWith: HttpStatusCode.OK);
@@ -45,9 +45,6 @@ public class BearerTokenHandlerTests
     public async Task SendAsync_WhenTheApiRejectsTheToken_MustForceAFullReloadOfTheLoginPage()
     {
         // Arrange
-        // A 401 from the API means the token is no longer accepted (typically expired). The cookie expires
-        // with the token, so a full page load - not a client-side route change - is what clears the stale
-        // circuit state and lands the user on the login page.
         var client = CreateClient(SignedInWithToken("expired-token"), respondWith: HttpStatusCode.Unauthorized);
 
         // Act

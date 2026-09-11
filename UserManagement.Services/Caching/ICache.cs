@@ -4,11 +4,8 @@ using System.Threading.Tasks;
 namespace UserManagement.Services.Caching;
 
 /// <summary>
-/// The cache the service layer depends on, kept to the three operations a cache-aside decorator needs so
-/// the store can be swapped without touching the callers: the in-process MemoryCacheAdapter today, a
-/// distributed one (e.g. Redis over IDistributedCache) when the API runs on more than one instance. A
-/// distributed implementation must serialize the whole entity: User.PasswordHash is [JsonIgnore]d for the
-/// audit snapshots, so the default JSON contract would silently drop it from cached users.
+/// The cache contract the service layer depends on, so the store can be swapped: in-process today,
+/// distributed later. A distributed implementation must serialize PasswordHash despite its [JsonIgnore].
 /// </summary>
 public interface ICache
 {

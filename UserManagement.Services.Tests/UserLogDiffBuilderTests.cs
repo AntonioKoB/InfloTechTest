@@ -68,10 +68,6 @@ public class UserLogDiffBuilderTests
     public void Build_MustNeverIncludeIdFieldEvenWhenOnlyOneSnapshotExists()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // Id is identity, not a business field - including it would show a pointless "Id: 1 -> (none)" row
-        // whenever only one snapshot exists (Created/Viewed/Deleted). When both snapshots exist (Updated),
-        // Id would already be excluded by the skip-if-equal rule since it never changes - this test covers
-        // the one case that rule doesn't naturally handle.
         var builder = CreateBuilder();
         var after = new User { Id = 42, Forename = "Brand New", Surname = "User", Email = "brandnewuser@example.com", IsActive = true, DateOfBirth = new DateOnly(1995, 4, 12) };
         var log = new UserLog { UserId = 42, Action = UserLogAction.Created, Timestamp = DateTime.UtcNow, BeforeJson = null, AfterJson = JsonSerializer.Serialize(after) };
@@ -87,9 +83,6 @@ public class UserLogDiffBuilderTests
     public void Build_WhenActionIsViewed_MustReturnNoChanges()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // Viewed stores an After snapshot (for display on the View screen) even though nothing changed -
-        // without this, the generic Before-is-null rule would show it as a full "nothing -> everything" diff,
-        // identical to Created's shape, which is misleading since a view isn't a change.
         var builder = CreateBuilder();
         var after = new User { Id = 1, Forename = "Existing", Surname = "User", Email = "existing@example.com", IsActive = true, DateOfBirth = new DateOnly(1990, 1, 1) };
         var log = new UserLog { UserId = 1, Action = UserLogAction.Viewed, Timestamp = DateTime.UtcNow, BeforeJson = null, AfterJson = JsonSerializer.Serialize(after) };
@@ -105,8 +98,6 @@ public class UserLogDiffBuilderTests
     public void Build_WhenOnlyThePasswordHashDiffers_MustReturnNoChanges()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // A password change is a real update (it is still recorded as one), but the diff must never surface
-        // the credential itself - neither the old hash nor the new one belongs on screen.
         var builder = CreateBuilder();
         var before = new User { Id = 1, Forename = "Same", Surname = "User", Email = "same@example.com", IsActive = true, DateOfBirth = new DateOnly(1990, 1, 1), PasswordHash = "hash-before" };
         var after = new User { Id = 1, Forename = "Same", Surname = "User", Email = "same@example.com", IsActive = true, DateOfBirth = new DateOnly(1990, 1, 1), PasswordHash = "hash-after" };
@@ -123,8 +114,6 @@ public class UserLogDiffBuilderTests
     public void Build_MustNeverIncludePasswordHashEvenWhenOnlyOneSnapshotExists()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // Same shape as the Id case above: with a single snapshot there is no "unchanged" comparison to hide
-        // behind, so the exclusion has to be explicit rather than a side effect of the skip-if-equal rule.
         var builder = CreateBuilder();
         var after = new User { Id = 1, Forename = "Brand New", Surname = "User", Email = "brandnewuser@example.com", IsActive = true, DateOfBirth = new DateOnly(1995, 4, 12), PasswordHash = "hash-after" };
         var log = new UserLog { UserId = 1, Action = UserLogAction.Created, Timestamp = DateTime.UtcNow, BeforeJson = null, AfterJson = JsonSerializer.Serialize(after) };
@@ -142,8 +131,6 @@ public class UserLogDiffBuilderTests
     public void Build_WhenActionIsASessionEvent_MustReturnNoChanges(UserLogAction action)
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // LoggedIn/LoggedOut mark the boundaries of a session and carry no snapshot at all. Without an explicit
-        // exclusion the property walk would emit a "nothing -> nothing" row for every field.
         var builder = CreateBuilder();
         var log = new UserLog { UserId = 1, Action = action, Timestamp = DateTime.UtcNow, BeforeJson = null, AfterJson = null };
 

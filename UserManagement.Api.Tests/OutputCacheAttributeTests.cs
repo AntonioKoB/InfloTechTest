@@ -5,12 +5,6 @@ using UserManagement.Api.Controllers;
 
 namespace UserManagement.Api.Tests;
 
-/// <summary>
-/// Locks in what the API caches: the users list and nothing else. The output-cache middleware, the named
-/// policy it resolves and the actual cache hits and evictions over HTTP are framework behaviour configured
-/// in Program.cs, proven by manual verification (a repeated GET is served from cache; a write makes the next
-/// GET fresh); what a unit test can pin down is which actions opt in.
-/// </summary>
 public class OutputCacheAttributeTests
 {
     [Fact]

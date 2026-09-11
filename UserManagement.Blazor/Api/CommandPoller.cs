@@ -4,9 +4,8 @@ using UserManagement.Api.Contracts.Commands;
 namespace UserManagement.Blazor.Api;
 
 /// <summary>
-/// Reads a command's status until it is Completed or Failed, waiting <c>interval</c> between reads, and gives
-/// up with a <see cref="TimeoutException"/> once <c>timeout</c> has passed with the command still Pending.
-/// Reports what the API says and never invents a status: an API error propagates as it is.
+/// Polls a command's status until it is Completed or Failed, or throws TimeoutException once the timeout
+/// passes. An API error propagates as it is.
 /// </summary>
 public class CommandPoller : ICommandPoller
 {

@@ -13,10 +13,8 @@ public static class JwtAuthenticationExtensions
     private const int MinimumSigningKeyBytes = 32;
 
     /// <summary>
-    /// Token issuance plus bearer validation, both driven by the Jwt configuration section. Fails at startup
-    /// when the signing key is unusable: a missing key would otherwise surface as an opaque 500 from the
-    /// first login. The key is a secret and lives in user-secrets / the environment, like the connection
-    /// string - see the README's Authentication section.
+    /// Token issuance and bearer validation from the Jwt configuration section. Fails at startup if the
+    /// signing key is missing or too short; the key lives in user-secrets or the environment.
     /// </summary>
     public static IServiceCollection AddJwtAuthentication(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
@@ -37,8 +35,7 @@ public static class JwtAuthenticationExtensions
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(bearer =>
             {
-                // Keep the JWT claim names (sub, email, name) rather than remapping them to the legacy XML
-                // schema names, so controllers read exactly what JwtTokenService wrote.
+                // Keep the sub/email/name claim names; controllers read what JwtTokenService wrote.
                 bearer.MapInboundClaims = false;
                 bearer.TokenValidationParameters = new TokenValidationParameters
                 {

@@ -23,8 +23,7 @@ public class UserLogService : IUserLogService
         _messageBus = messageBus;
     }
 
-    // Builds the finished entry here (snapshots serialized at the moment of the action) and hands it to the
-    // bus; RecordUserLogCommandHandler writes it, off the caller's path.
+    // Built here, written by RecordUserLogCommandHandler off the caller's path.
     public Task RecordAsync(long userId, UserLogAction action, User? before, User? after)
         => _messageBus.PublishAsync(new RecordUserLogCommand(Guid.NewGuid(), new UserLog
         {

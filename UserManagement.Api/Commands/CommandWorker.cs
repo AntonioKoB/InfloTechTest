@@ -14,16 +14,14 @@ using UserManagement.Services.Messaging;
 namespace UserManagement.Api.Commands;
 
 /// <summary>
-/// The only consumer of the bus. Takes commands in order, runs each one in its own DI scope through the
-/// handler registered for its type, and records the outcome for the status endpoint. A failing handler
-/// marks its command Failed and is logged; it never stops the worker.
+/// Consumes the bus in order, runs each command in its own DI scope and records the outcome. A failing
+/// handler marks its command Failed; it never stops the worker.
 /// </summary>
 public partial class CommandWorker : BackgroundService
 {
     private delegate Task<long> Dispatcher(IServiceProvider services, ICommand command, CancellationToken cancellationToken);
 
-    // One typed dispatcher per command type, built on first use. After that a command is a direct delegate
-    // call into its handler, and a handler's exception arrives as itself rather than wrapped by reflection.
+    // One typed dispatcher per command type, built on first use.
     private static readonly ConcurrentDictionary<Type, Dispatcher> Dispatchers = new();
     private static readonly MethodInfo DispatchMethod = typeof(CommandWorker).GetMethod(nameof(Dispatch), BindingFlags.NonPublic | BindingFlags.Static)!;
 
@@ -58,10 +56,8 @@ public partial class CommandWorker : BackgroundService
         }
         catch (Exception ex)
         {
-            // Only the bus itself can throw here (each command's own failure is handled in ProcessAsync). A
-            // worker that went quiet would leave every later command Pending while the API kept accepting
-            // them, so this says why it died and lets the host's BackgroundService policy stop the process,
-            // which the platform then restarts.
+            // Only the bus can throw here. Rethrow so the host restarts the process instead of leaving every
+            // later command Pending.
             LogWorkerFaulted(ex);
             throw;
         }
@@ -91,9 +87,7 @@ public partial class CommandWorker : BackgroundService
     private static Task<long> Dispatch<TCommand>(IServiceProvider services, ICommand command, CancellationToken cancellationToken) where TCommand : ICommand
         => services.GetRequiredService<ICommandHandler<TCommand>>().HandleAsync((TCommand)command, cancellationToken);
 
-    // The users list is output-cached by the API and the row changed here, so this is where the tag goes.
-    // A log entry changes nothing the list shows. The eviction ignores the stopping token on purpose: a
-    // write that completed must evict even if the host is shutting down.
+    // The users list is output-cached; evict once the row has changed, even during shutdown.
     private static bool ChangesTheUsersList(ICommand command)
         => command is CreateUserCommand or UpdateUserCommand or DeleteUserCommand;
 

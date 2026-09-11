@@ -200,12 +200,9 @@ public class UserServiceTests
     }
 
     [Fact]
-    public async Task UpdateAsync_WhenDataContextThrowsConcurrencyConflict_MustThrowUserNoLongerExistsException()
+    public async Task UpdateAsync_WhenConcurrencyConflict_MustThrowUserNoLongerExists()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // Translates the data layer's ConcurrencyConflictException (raised when the row was deleted by
-        // another request since being fetched) into a Services-layer exception, so callers of IUserService
-        // never need to reference the data layer's exception types directly.
         var service = CreateService();
         _dataContext
             .Setup(s => s.FirstOrDefaultAsync<User>(It.IsAny<Expression<Func<User, bool>>>()))
@@ -242,12 +239,9 @@ public class UserServiceTests
     }
 
     [Fact]
-    public async Task DeleteAsync_WhenCalled_MustCallDeleteWhereAsyncWithMatchingIdPredicateWithoutFetchingFirst()
+    public async Task DeleteAsync_MustDeleteWhereByIdWithoutFetching()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // Proves the fetch-then-delete race is gone: DeleteAsync must go straight to a predicate-based bulk
-        // delete instead of fetching the entity via GetByIdAsync first - that fetch-then-mutate gap is what
-        // let a concurrent second delete find the row already gone and throw DbUpdateConcurrencyException.
         var service = CreateService();
         Expression<Func<User, bool>>? capturedPredicate = null;
         _dataContext
@@ -269,10 +263,6 @@ public class UserServiceTests
     public async Task DeleteAsync_WhenUserDoesNotExist_MustNotThrowAndMustStillCallDeleteWhereAsync()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // The fix makes delete idempotent by never creating the race window in the first place: a single
-        // predicate-based DELETE affecting zero rows (already-deleted, or never-existed, id) is not an error
-        // - unlike the old fetch-then-delete flow, which used to special-case this by checking existence
-        // first instead of just letting the underlying delete be a safe no-op.
         var service = CreateService();
         _dataContext
             .Setup(s => s.DeleteWhereAsync<User>(It.IsAny<Expression<Func<User, bool>>>()))
@@ -353,9 +343,6 @@ public class UserServiceTests
 
         var users = new[] { activeUser, nonActiveUser };
 
-        // Compiles and applies the real predicate FilterByActiveAsync builds against an in-memory array -
-        // this proves the service pushes filtering down via WhereAsync rather than materializing everything
-        // via GetAllAsync and filtering in C#, not just that some mock returns canned data.
         _dataContext
             .Setup(s => s.WhereAsync<User>(It.IsAny<Expression<Func<User, bool>>>()))
             .ReturnsAsync((Expression<Func<User, bool>> predicate) => users.Where(predicate.Compile()));

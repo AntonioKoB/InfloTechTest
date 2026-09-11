@@ -11,11 +11,8 @@ public static class ServiceCollectionExtensions
         => services
             .AddDbContext<DataContext>(options => options.UseSqlServer(
                 configuration.GetConnectionString("DefaultConnection"),
-                // Retries the transient faults a hosted SQL Server (Azure SQL in particular) is documented to
-                // throw: throttling, failover, dropped connections. The budget is deliberately short - roughly
-                // nine seconds worst case - so it fits inside the Blazor client's own per-attempt timeout
-                // instead of both layers retrying on top of each other. Nothing in the data layer opens a user
-                // transaction, so no ExecuteAsync wrapping is needed.
+                // Retries the transient faults Azure SQL is documented to raise. Roughly nine seconds worst
+                // case, so it fits inside the Blazor client's own per-attempt timeout.
                 sqlOptions => sqlOptions.EnableRetryOnFailure(
                     maxRetryCount: 3,
                     maxRetryDelay: TimeSpan.FromSeconds(5),

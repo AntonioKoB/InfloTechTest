@@ -7,9 +7,8 @@ using UserManagement.Services.Domain.Interfaces;
 namespace UserManagement.Services.Commands;
 
 /// <summary>
-/// Re-reads the user in the worker's own scope, applies the command's fields to that instance and saves it,
-/// recording an Updated entry whose "before" snapshot is a copy taken before the fields were applied. A user
-/// that vanished since the API accepted the command fails the command rather than silently doing nothing.
+/// Re-reads the user in the worker's scope, applies the fields and saves. A user that vanished since the API
+/// accepted the command fails it.
 /// </summary>
 public class UpdateUserCommandHandler : ICommandHandler<UpdateUserCommand>
 {

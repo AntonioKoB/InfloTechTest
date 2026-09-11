@@ -16,17 +16,12 @@ using UserManagement.Services.Messaging;
 
 namespace UserManagement.Api.Tests;
 
-/// <summary>
-/// The worker is the only consumer of the bus. Each test starts the real hosted service against a real
-/// in-memory bus and status store, publishes, and waits for the status to leave Pending - the same path the
-/// API's caller polls.
-/// </summary>
 public class CommandWorkerTests : IAsyncLifetime
 {
     public sealed record TestCommand(Guid CommandId) : ICommand;
 
     [Fact]
-    public async Task ExecuteAsync_MustDispatchEachCommandToItsHandlerAndMarkItCompletedWithTheReturnedUserId()
+    public async Task ExecuteAsync_MustDispatchToHandlerAndMarkCompletedWithUserId()
     {
         // Arrange
         var handler = new Mock<ICommandHandler<TestCommand>>();
@@ -47,8 +42,6 @@ public class CommandWorkerTests : IAsyncLifetime
     public async Task ExecuteAsync_WhenAHandlerThrows_MustMarkTheCommandFailedWithTheExceptionMessage()
     {
         // Arrange
-        // A duplicate email is the expected failure: the service throws, the status carries its message, and
-        // that message is what the caller shows.
         var handler = new Mock<ICommandHandler<TestCommand>>();
         handler.Setup(h => h.HandleAsync(It.IsAny<TestCommand>(), It.IsAny<CancellationToken>())).ThrowsAsync(new EmailAlreadyExistsException("taken@example.com"));
         await StartWorkerAsync(s => s.AddSingleton(handler.Object));
@@ -88,8 +81,6 @@ public class CommandWorkerTests : IAsyncLifetime
     public async Task ExecuteAsync_WhenAHandlerThrows_MustKeepProcessingTheNextCommand()
     {
         // Arrange
-        // One bad command must never take the worker down with it - every later command would sit Pending
-        // forever, which the caller sees as a timeout.
         var failing = new TestCommand(Guid.NewGuid());
         var following = new TestCommand(Guid.NewGuid());
         var handler = new Mock<ICommandHandler<TestCommand>>();
@@ -109,11 +100,9 @@ public class CommandWorkerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenACreateUpdateOrDeleteCompletes_MustEvictTheUsersListCacheEachTime()
+    public async Task ExecuteAsync_WhenUserCommandCompletes_MustEvictUsersListCache()
     {
         // Arrange
-        // The list is output-cached by the API and the write now happens here, so this is where the tag is
-        // evicted - after the row changed, never when the request was merely accepted.
         var create = new Mock<ICommandHandler<CreateUserCommand>>();
         create.Setup(h => h.HandleAsync(It.IsAny<CreateUserCommand>(), It.IsAny<CancellationToken>())).ReturnsAsync(1);
         var update = new Mock<ICommandHandler<UpdateUserCommand>>();
@@ -160,7 +149,6 @@ public class CommandWorkerTests : IAsyncLifetime
     public async Task ExecuteAsync_WhenALogCommandCompletes_MustNotEvictTheUsersListCache()
     {
         // Arrange
-        // A log entry changes nothing the users list shows.
         var record = new Mock<ICommandHandler<RecordUserLogCommand>>();
         record.Setup(h => h.HandleAsync(It.IsAny<RecordUserLogCommand>(), It.IsAny<CancellationToken>())).ReturnsAsync(5);
         await StartWorkerAsync(s => s.AddSingleton(record.Object));
@@ -178,8 +166,6 @@ public class CommandWorkerTests : IAsyncLifetime
     public async Task ExecuteAsync_MustResolveTheHandlerFromANewScopeForEachCommand()
     {
         // Arrange
-        // Handlers are scoped (they carry a DbContext); a long-lived worker must open a scope per command,
-        // not hold one for its lifetime.
         var instances = new List<object>();
         await StartWorkerAsync(s => s.AddSingleton(instances).AddScoped<ICommandHandler<TestCommand>, ScopeRecordingHandler>());
         var first = new TestCommand(Guid.NewGuid());
@@ -200,9 +186,6 @@ public class CommandWorkerTests : IAsyncLifetime
     public async Task StopAsync_MustLogThatTheWorkerStoppedAtInformation()
     {
         // Arrange
-        // BackgroundService starts ExecuteAsync through Task.Run with the stopping token, so a stop that lands
-        // before the loop has begun cancels it without ever running it. One processed command proves the loop
-        // is live before it is asked to stop.
         var handler = new Mock<ICommandHandler<TestCommand>>();
         handler.Setup(h => h.HandleAsync(It.IsAny<TestCommand>(), It.IsAny<CancellationToken>())).ReturnsAsync(1);
         await StartWorkerAsync(s => s.AddSingleton(handler.Object));
@@ -222,8 +205,6 @@ public class CommandWorkerTests : IAsyncLifetime
     public async Task ExecuteAsync_WhenTheBusItselfFails_MustLogAtErrorWithTheExceptionAndStop()
     {
         // Arrange
-        // A worker that died quietly would leave every later command Pending while the API kept accepting
-        // them. It logs why and lets the exception reach the host, whose default policy stops the process.
         var bus = new Mock<IMessageBus>();
         bus.Setup(b => b.ConsumeAsync(It.IsAny<CancellationToken>())).Throws(new InvalidOperationException("bus is gone"));
         using var provider = new ServiceCollection().BuildServiceProvider();

@@ -6,11 +6,6 @@ using UserManagement.Services.Domain.Interfaces;
 
 namespace UserManagement.Data.Tests;
 
-/// <summary>
-/// The auditing decorator records reads. Writes are commands now: the Created/Updated/Deleted entries are
-/// recorded by the command handlers, so the decorator must let those calls straight through - recording
-/// them here as well would log every write twice.
-/// </summary>
 public class AuditingUserServiceTests
 {
     [Fact]
@@ -61,10 +56,6 @@ public class AuditingUserServiceTests
     public async Task GetByIdAsync_WhenRecordAsViewedIsFalse_MustNotRecordAnyLog()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // Deliberate design decision: GetByIdAsync is shared by the View screen, Edit's form pre-fill, Edit's
-        // own re-fetch before saving, and Delete's confirmation screen - only the caller knows which of these
-        // it is, so it says so via recordAsViewed rather than the decorator guessing from context. Callers
-        // other than the View screen pass the default (false), so no log is recorded here.
         var service = CreateService();
         var user = new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1) };
         _inner.Setup(s => s.GetByIdAsync(5, false)).ReturnsAsync(user);

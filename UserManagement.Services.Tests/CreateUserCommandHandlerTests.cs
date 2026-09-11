@@ -9,11 +9,6 @@ using UserManagement.Services.Domain.Interfaces;
 
 namespace UserManagement.Data.Tests;
 
-/// <summary>
-/// The create handler is where the user write happens now that the API only accepts. It writes through
-/// IUserService (uniqueness check, caching) and records the Created entry the way the auditing decorator
-/// used to, so the log carries the same snapshot.
-/// </summary>
 public class CreateUserCommandHandlerTests
 {
     [Fact]
@@ -40,7 +35,6 @@ public class CreateUserCommandHandlerTests
     public async Task HandleAsync_MustRecordACreatedLogWithTheSavedUserAsTheAfterSnapshot()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // The id exists only after the save, so the log must be recorded after CreateAsync, not before.
         var handler = CreateHandler();
         var command = NewCommand();
         _userService.Setup(s => s.CreateAsync(It.IsAny<User>())).Callback<User>(u => u.Id = 42).Returns(Task.CompletedTask);
@@ -76,7 +70,6 @@ public class CreateUserCommandHandlerTests
     public async Task HandleAsync_WhenCreateAsyncThrows_MustRecordNothingAndLetTheExceptionPropagate()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // A duplicate email is the common failure; the worker turns the exception into a Failed status.
         var handler = CreateHandler();
         var command = NewCommand();
         _userService.Setup(s => s.CreateAsync(It.IsAny<User>())).ThrowsAsync(new EmailAlreadyExistsException(command.Email));

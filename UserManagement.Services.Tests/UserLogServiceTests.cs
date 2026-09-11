@@ -18,8 +18,6 @@ public class UserLogServiceTests
     public async Task RecordAsync_WhenCalledWithBeforeAndAfter_MustPublishALogCommandWithBothSnapshots()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // Recording an action builds the finished entry here and hands it to the bus; the write itself is the
-        // log command handler's job, off the caller's path.
         var service = CreateService();
         var before = new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1) };
         var after = new User { Id = 5, Forename = "Updated", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1) };
@@ -75,9 +73,6 @@ public class UserLogServiceTests
     public async Task RecordAsync_MustNeverIncludeThePasswordHashInEitherSnapshot()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // Snapshots are rendered on screen as the before/after diff and stay in the log table forever - a
-        // credential has no business there, hashed or not. Serializing the whole User must therefore leave
-        // PasswordHash out, not just avoid displaying it.
         var service = CreateService();
         var before = new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1), PasswordHash = "hash-before" };
         var after = new User { Id = 5, Forename = "Existing", Surname = "User", Email = "existing@example.com", DateOfBirth = new DateOnly(1990, 1, 1), PasswordHash = "hash-after" };
@@ -130,13 +125,9 @@ public class UserLogServiceTests
     }
 
     [Fact]
-    public async Task GetPagedAsync_WhenCalled_MustRequestFirstPageFromDataContextAndPopulatePagingInfo()
+    public async Task GetPagedAsync_MustRequestPageFromDataContextAndPopulatePaging()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
-        // Pagination is pushed down to IDataContext.GetPageAsync/CountAsync rather than materializing the
-        // whole table via GetAllAsync and paging in memory - that push-down's own correctness (ordering,
-        // actual skip/take slicing) is proven separately in DataContextTests against a real DataContext.
-        // This test only proves UserLogService asks the data layer for the right slice.
         var service = CreateService();
         var pageItems = new[]
         {
@@ -177,7 +168,7 @@ public class UserLogServiceTests
     }
 
     [Fact]
-    public async Task GetPagedAsync_WhenPageIsPastTheEnd_MustReturnWhateverDataContextReturnsWithTotalCountStillPopulated()
+    public async Task GetPagedAsync_WhenPagePastEnd_MustReturnDataContextResultWithTotalCount()
     {
         // Arrange: Initializes objects and sets the value of the data that is passed to the method under test.
         var service = CreateService();

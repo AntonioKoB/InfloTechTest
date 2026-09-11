@@ -20,10 +20,8 @@ public class DataContext : DbContext, IDataContext
     {
         model.Entity<User>().HasIndex(u => u.Email).IsUnique();
 
-        // PasswordHasher output is salted, so it differs on every call - the seed value has to be a fixed
-        // literal for the same reason as the fixed seed timestamp below (HasData values are part of the
-        // model). This is the PasswordHasher (v3, PBKDF2) hash of "12345", the documented seed password
-        // that every seeded user shares so a reviewer can sign in as any of them.
+        // A fixed literal: PasswordHasher output is salted and HasData values are part of the model. This is
+        // the hash of "12345", the seed password every seeded user shares.
         const string SeedPasswordHash = "AQAAAAIAAYagAAAAEPZnlhpJfpSdxqhrGlbHhIasKXCG6qHDec7pxnfgcQXKywwpDcmZ8UEqvYWj8sN3+g==";
 
         var users = new[]
@@ -43,11 +41,8 @@ public class DataContext : DbContext, IDataContext
 
         model.Entity<User>().HasData(users);
 
-        // Fixed, deterministic value - not DateTime.UtcNow. HasData seed values are part of the model itself,
-        // so a value that changes on every model build makes EF's migrations validation (correctly) treat
-        // every startup as "the model has pending changes", which forces disabling that check entirely -
-        // losing the safety net that catches a genuinely forgotten migration. A static value keeps that
-        // check meaningful.
+        // A fixed value: HasData seed values are part of the model, and one that changes per build makes EF
+        // report pending model changes on every startup.
         var seedTimestamp = new DateTime(2026, 9, 7, 12, 0, 0, DateTimeKind.Utc);
 
         model.Entity<UserLog>().HasData(users.Select(u => new UserLog
@@ -104,9 +99,8 @@ public class DataContext : DbContext, IDataContext
         }
         catch (DbUpdateConcurrencyException ex)
         {
-            // EF Core throws this when the affected-row-count doesn't match what it expected - most
-            // commonly, the row was deleted by someone else between being fetched and being saved. Wrapped
-            // so callers don't need to reference EF Core directly to handle it.
+            // Thrown when the affected row count differs from the expected one (the row was deleted since it
+            // was fetched). Wrapped so callers need no EF Core reference.
             throw new ConcurrencyConflictException("The entity being saved no longer exists - it may have been deleted by another request.", ex);
         }
     }

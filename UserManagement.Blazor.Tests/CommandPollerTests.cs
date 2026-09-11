@@ -9,10 +9,6 @@ using UserManagement.Blazor.Api;
 
 namespace UserManagement.Blazor.Tests;
 
-/// <summary>
-/// The poller is the UI's only way to learn what happened to an accepted command. It runs here with a
-/// millisecond interval and timeout so the timing behaviour is exercised without a fake clock.
-/// </summary>
 public class CommandPollerTests
 {
     [Fact]
@@ -69,8 +65,6 @@ public class CommandPollerTests
     public async Task WaitForOutcomeAsync_WhenStillPendingPastTheTimeout_MustThrowTimeoutException()
     {
         // Arrange
-        // A command the API lost (a restart between accept and execute) stays Pending forever; the caller
-        // must get an error, not a spinner.
         var id = Guid.NewGuid();
         _usersApi.Setup(a => a.GetCommandStatusAsync(id)).ReturnsAsync(Status(id, CommandState.Pending));
         var poller = CreatePoller(timeout: TimeSpan.FromMilliseconds(50));
@@ -103,7 +97,6 @@ public class CommandPollerTests
     public async Task WaitForOutcomeAsync_WhenTheStatusCallFails_MustLetTheApiExceptionPropagate()
     {
         // Arrange
-        // The poller reports what the API said; it never invents a status for an id the API does not know.
         var id = Guid.NewGuid();
         var notFound = await ApiException.Create(
             new HttpRequestMessage(HttpMethod.Get, $"https://localhost/api/commands/{id}"),

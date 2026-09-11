@@ -5,14 +5,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# The login to Azure is a federated (OIDC) credential: the job asks GitHub for an id token and Entra trusts it for
-# this repository's main branch, so no client secret is stored anywhere.
+# OIDC federated credential: GitHub's id token is trusted for this repository's main branch; no client secret.
 permissions:
   id-token: write
   contents: read
 
-# One deployment at a time, and never cancelled: a second push queues behind the running deployment instead of
-# aborting it half way through. This group is separate from the CI workflow's, so CI runs never interfere.
+# One deployment at a time, never cancelled; separate from the CI group.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
@@ -81,8 +79,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # The parameter file reads the three secrets from these environment variables. The template owns every app
-      # setting and connection string on both sites, so nothing is configured from this workflow.
+      # The parameter file reads the three secrets from these variables; the template owns every app setting.
       - name: Deploy Bicep template
         env:
           SQL_ADMIN_LOGIN: ${{ secrets.SQL_ADMIN_LOGIN }}
@@ -145,9 +142,8 @@ jobs:
           app-name: ${{ needs.infra.outputs.blazorSiteName }}
           package: blazor
 
-  # Both apps expose GET /health. The API's check opens the database, so a Healthy answer proves the migration ran
-  # and the connection string works; the Blazor check proves the host is serving. The Free tier has no Always On,
-  # so the first request after a deployment can take a while: poll for up to three minutes.
+  # Poll /health on both sites; the API's check opens the database. No Always On on the Free tier, so allow up
+  # to three minutes.
   smoke:
     name: Smoke test
     needs: [infra, deploy-api, deploy-blazor]

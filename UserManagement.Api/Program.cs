@@ -51,7 +51,7 @@ app.UseOutputCache();
 
 app.MapControllers();
 
-// Anonymous on purpose: health probes carry no token. See HealthCheckExtensions for what it checks.
+// Anonymous: health probes carry no token.
 app.MapHealthChecks("/health").AllowAnonymous();
 
 app.Run();

@@ -46,7 +46,7 @@ public partial class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Ends the session identified by the bearer token. There is no body: the token says who is signing out.
+    /// Ends the session identified by the bearer token.
     /// </summary>
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
@@ -56,8 +56,8 @@ public partial class AuthController : ControllerBase
         return NoContent();
     }
 
-    // The email is logged, the password never is. A run of these for one email is what a guessing attempt
-    // looks like, which is why this is a Warning rather than Information.
+    // The email is logged, never the password. Repeated failures for one email are what a guessing attempt
+    // looks like, hence Warning.
     [LoggerMessage(EventId = 1101, Level = LogLevel.Warning, Message = "Login rejected for {Email}")]
     private partial void LogLoginRejected(string email);
 }

@@ -6,12 +6,6 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace UserManagement.Data.Tests;
 
-/// <summary>
-/// Locks in the data-access registration's connection resiliency: the SQL Server provider must be configured
-/// with a retrying execution strategy and the budget chosen for it. Building the context here never opens a
-/// connection - the strategy is decided from the options alone - so any well-formed connection string will do.
-/// The retry behaviour itself is provider code, proven by manual verification against a stopped instance.
-/// </summary>
 public class ServiceCollectionExtensionsTests
 {
     [Fact]

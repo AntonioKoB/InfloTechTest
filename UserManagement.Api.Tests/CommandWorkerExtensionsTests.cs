@@ -4,10 +4,6 @@ using UserManagement.Api.Commands;
 
 namespace UserManagement.Api.Tests;
 
-/// <summary>
-/// Locks in that the worker is hosted by the API: without this registration commands are accepted and never
-/// executed, and nothing else in the suite would notice.
-/// </summary>
 public class CommandWorkerExtensionsTests
 {
     [Fact]

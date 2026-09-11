@@ -14,18 +14,15 @@ using UserManagement.Blazor.Api;
 namespace UserManagement.Blazor.Auth;
 
 /// <summary>
-/// The two form posts that change who the browser is signed in as. Both are genuine HTTP posts (not
-/// circuit events) because only an HTTP response can set or clear the auth cookie, and both require the
-/// antiforgery token so a third-party page cannot forge them.
+/// The login and logout form posts. Real HTTP posts rather than circuit events, because only an HTTP response
+/// can set or clear the auth cookie; both require the antiforgery token.
 /// </summary>
 public static partial class AuthEndpoints
 {
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        // The login page (@page "/login") answers POST as well. Routing picks this handler over it for a form
-        // post only because the handler declares the content types it consumes - a declaration [FromForm]
-        // parameters would imply, but this handler reads the form itself. Without it every POST /login is an
-        // AmbiguousMatchException.
+        // The /login page answers POST too. Declaring the form content types is what makes routing pick this
+        // handler for a form post; without it every POST /login is an AmbiguousMatchException.
         endpoints.MapPost("/login", LoginAsync).Accepts<LoginRequest>("application/x-www-form-urlencoded", "multipart/form-data");
         endpoints.MapPost("/logout", LogoutAsync);
         return endpoints;
@@ -82,9 +79,8 @@ public static partial class AuthEndpoints
             return AntiforgeryFailure();
         }
 
-        // Tell the API first so the sign-out is audited against the session's token. If the API already
-        // rejects that token (expired), the local sign-out still goes ahead - the cookie is what keeps the
-        // browser signed in, and it must go either way.
+        // Tell the API first so the sign-out is audited; sign out locally even if the API rejects an expired
+        // token.
         var token = httpContext.User.FindFirst(AuthClaimTypes.AccessToken)?.Value;
         if (token is not null)
         {
@@ -102,32 +98,25 @@ public static partial class AuthEndpoints
         return Results.Redirect("/login");
     }
 
-    // Only ever redirect within this site: an absolute or protocol-relative ReturnUrl could send a freshly
-    // signed-in user anywhere.
+    // Only redirect within this site.
     private static string LocalReturnUrlOrHome(string? returnUrl)
         => !string.IsNullOrEmpty(returnUrl) && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//") && !returnUrl.StartsWith("/\\")
             ? returnUrl
             : "/";
 
-    // A 400 with a body: the status-code-pages middleware re-executes body-less 4xx responses through the
-    // NotFound page, which sits behind [Authorize] and would turn this into a redirect to the login page.
+    // A body-less 400 would be re-executed through the NotFound page, which sits behind [Authorize].
     private static IResult AntiforgeryFailure()
         => Results.Problem(title: "The request could not be verified as coming from this site.", statusCode: StatusCodes.Status400BadRequest);
 
-    // The antiforgery middleware validates the token for [RequireAntiforgeryToken] endpoints and records the
-    // outcome as a request feature; it rejects nothing itself. A handler with [FromForm] parameters would have
-    // the form read during binding, and reading it after a failed validation throws - a 500, not a rejection.
-    // So neither handler binds form parameters: both check the outcome here first, and Login reads the form
-    // only after that. A post that was not validated (no form body, or a forged one) is rejected before it can
-    // touch the sign-in state.
+    // Reading the form after a failed antiforgery validation throws, so both handlers check the recorded
+    // outcome before touching the form. [FromForm] parameters would read it during binding, before the
+    // handler runs.
     private static bool AntiforgeryValidationPassed(HttpContext httpContext)
         => httpContext.Features.Get<IAntiforgeryValidationFeature>() is { IsValid: true };
 
-    // A static class cannot be a type argument, so ILogger<AuthEndpoints> is not available; the factory gives
-    // the same category name.
+    // A static class cannot be a type argument for ILogger<T>.
     private static ILogger CreateLogger(ILoggerFactory loggerFactory) => loggerFactory.CreateLogger(typeof(AuthEndpoints));
 
-    // Handled errors, logged where they are handled. The password is never logged.
     [LoggerMessage(EventId = 2001, Level = LogLevel.Warning, Message = "Login rejected by the API for {Email} ({StatusCode})")]
     private static partial void LogLoginRejected(ILogger logger, string email, HttpStatusCode statusCode);
 

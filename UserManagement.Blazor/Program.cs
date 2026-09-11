@@ -23,15 +23,14 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddMudServices();
 
-// The browser is signed in with a cookie issued by this app once the API has accepted the credentials. The
-// cookie's principal carries the API bearer token as a claim, so the token never reaches browser script.
+// The cookie's principal carries the API bearer token as a claim, so the token never reaches browser script.
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
         options.LoginPath = "/login";
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-        // The expiry is set per sign-in to match the token's own lifetime and must not be extended past it.
+        // Expiry matches the token's lifetime and is never extended past it.
         options.SlidingExpiration = false;
     });
 builder.Services.AddAuthorization();
@@ -49,23 +48,19 @@ var refitSettings = new RefitSettings
 
 var apiBaseUrl = new Uri(builder.Configuration["Api:BaseUrl"]!);
 
-// Login carries no token - the credentials are the request body.
 builder.Services.AddHttpClient(nameof(IAuthApi))
     .AddRefitClient<IAuthApi>(refitSettings)
     .ConfigureHttpClient(c => c.BaseAddress = apiBaseUrl)
     .AddStandardResilienceHandler();
 
-// Everything else sends the signed-in user's bearer token. These clients are built per circuit (scoped)
-// rather than through AddRefitClient: IHttpClientFactory builds handler pipelines in its own DI scope, so a
-// handler registered there could never see the circuit's authentication state. The named clients still
-// supply the resilience pipeline; the bearer handler wraps it from the outside so retries re-send the header.
+// Built per circuit rather than through AddRefitClient: IHttpClientFactory builds handler pipelines outside
+// the circuit's DI scope, so a handler there cannot see the authentication state. The named clients still
+// supply the resilience pipeline.
 builder.Services.AddHttpClient(nameof(IUsersApi)).AddStandardResilienceHandler();
 builder.Services.AddHttpClient(nameof(ILogsApi)).AddStandardResilienceHandler();
 builder.Services.AddScoped(sp => CreateAuthenticatedClient<IUsersApi>(sp));
 builder.Services.AddScoped(sp => CreateAuthenticatedClient<ILogsApi>(sp));
 
-// Waits for an accepted command by polling its status through the users client, so it is scoped like it.
-// The worker normally finishes in milliseconds, so one or two polls; the timeout is the ceiling for a lost one.
 builder.Services.AddScoped<ICommandPoller>(sp => new CommandPoller(sp.GetRequiredService<IUsersApi>(), TimeSpan.FromMilliseconds(250), TimeSpan.FromSeconds(30)));
 
 var app = builder.Build();
@@ -89,8 +84,7 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapAuthEndpoints();
 
-// Liveness only - this host has no database of its own; the API's /health covers that. Anonymous on
-// purpose: probes carry no token.
+// Liveness only; the API's /health covers the database. Anonymous: probes carry no token.
 app.MapHealthChecks("/health").AllowAnonymous();
 
 app.Run();
